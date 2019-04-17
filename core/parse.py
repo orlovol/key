@@ -15,10 +15,3 @@ def read_csv(path):
         georeader = csv.reader(data)
         for row in map(Row._make, georeader):
             yield row
-
-
-if __name__ == "__main__":
-    geofile = "geo.csv"
-
-    for row in read_csv(geofile):
-        print(row)
