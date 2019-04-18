@@ -103,9 +103,9 @@ class Region(GeoItem):
         name_uk = make_name(cls._re_keys, match_uk)
 
         if parent:
-            parent_name : Name = make_name(parent._re_keys, match)
+            parent_name: Name = make_name(parent._re_keys, match)
             # print(parent_name, parent.registry) # need grandname
-            parent : GeoItem = parent.registry.get(parent_name.name, None)
+            parent: GeoItem = parent.registry.get(parent_name.name, None)
 
         return super().__new__(cls, geo_id=geo_id, name=name, name_uk=name_uk, parent=parent)
 
@@ -115,6 +115,7 @@ class Raion(Region):
 
     def __new__(cls, geo_id, name, name_uk, parent=Region):
         return super().__new__(cls, geo_id, name, name_uk, parent=parent)
+
 
 class City(Raion):
     def __new__(cls, geo_id, name, name_uk):

@@ -11,7 +11,7 @@ from typing import Iterable, Tuple, Set
 from itertools import chain
 from collections import defaultdict
 
-from utils import total_size
+from .utils import total_size
 
 try:
     profile()
