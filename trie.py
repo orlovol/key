@@ -6,12 +6,17 @@ Keys should be unique, values - any alphanumeric sequences
 """
 
 
-import sys
-from typing import Iterable, Tuple
+from tqdm import tqdm
+from typing import Iterable, Tuple, Set
 from itertools import chain
 from collections import defaultdict
 
-from memory_profiler import profile
+from utils import total_size
+
+try:
+    profile()
+except NameError:
+    profile = lambda x: x  # noqa
 
 
 def rec_dd():
@@ -22,21 +27,22 @@ TRIE = rec_dd()
 ITEMSKEY = "_items"
 
 
-def add(id_, word):
+def add(id_: int, word: str) -> None:
     """Split word into characters and add to the tree.
        Insert id into `items` list after last character.
     """
     level = TRIE
-    for c in word:
+    for c in word.lower():  # ? more preprocessing?
         level = level[c]
+
     # we can't have two different words with same tree-path
-    # but they can have multiple ids, so let's expect that
+    # but they can have multiple ids, so let's expect that and save to list
     items = level.setdefault(ITEMSKEY, list())
     if id_ not in items:
         items.append(id_)
 
 
-def collect(level) -> Iterable[int]:
+def collect(level: dict) -> Iterable[int]:
     """Collect items on specified tree level
     """
     keys = set(level.keys()) - {ITEMSKEY}
@@ -60,40 +66,25 @@ def show(level, prefix=""):
     print(prefix)
     for key in level.keys():
         if key == ITEMSKEY:
-            print(level[key])
+            print(f"{ITEMSKEY}: {level[key]}")
         else:
             show(level[key], prefix + key)
 
 
 @profile
-def main(items: Iterable[Tuple[int, str]]):
-    l = len(items)
-    k = l/10
-    for i, item in enumerate(items):
-        if not (i % k):
-            print(f"{i/l:.0%}")
+def index(items: Iterable[Tuple[int, str]]) -> Set[int]:
+    """Add items to index and return set of present ids"""
+    for item in tqdm(items):  # * progressbar eats memory, but helps a lot
         add(*item)
-    print()
 
-    items = sorted(collect(TRIE))
-
-    # show(TRIE)
-    info = analyze(TRIE)
-
-    li, lw = len(items), len(words)
-    print(
-        f"""\
-Input ids: {lw}
-Added ids: {li} ({li / lw:.2%})
-Tree Size: {sys.getsizeof(TRIE) / 1024:.2f} KB
-Index Size: {sys.getsizeof(items) / 1024:.2f} KB
-Info: {dict(info)}\
-    """
-    )
+    # * collect returns duplicated ids, but we may use `set` to return unique ids
+    # * and present them in preferred language
+    added = set(collect(TRIE))  # same as input ids
+    return added
 
 
-if __name__ == "__main__":
-    import timing  # local helper
+@profile
+def _words():
 
     words_ = [
         ("Запорожская область", "Запорізька область"),
@@ -123,18 +114,50 @@ if __name__ == "__main__":
         ("Винницкая область", "Вінницька область"),
     ]
 
-    words_ = [(a.lower(), b.lower()) for (a, b) in words_]
+    words_ += [(a[::-1], b[::-1]) for a, b in words_]  # add more fake words
 
-    alphabet = "".join(sorted(set(chain(*chain(*words_)))))
-    print(f"Alphabet ({len(alphabet)}): {alphabet}")
+    alphabet = "".join(sorted(set(c for pair in words_ for c in "".join(pair).lower())))
+
+    id_mul = 1000  # * same words, more ids
+    word_mul = 20  # * more words, same ids
 
     word_len = 2 * len(words_)
-    id_mul = 2  # same words, more ids
-    word_mul = 2000  # more words, same ids
+    id_len = word_len * id_mul
 
-    words = (
-        list(chain.from_iterable((((i, a), (i, b)) for i, (a, b) in enumerate(words_ * id_mul))))
-        * word_mul
+    print(
+        f"""\
+Alphabet: `{alphabet}` ({len(alphabet)})
+Unique words: {word_len}
+IDs: {id_len}
+Total words: {id_len * word_mul}
+"""
     )
-    main(words)
-    print(f"Params: {word_len} unique/{word_len*word_mul*id_mul} words, {word_len*id_mul} ids")
+
+    # unpack language pairs with same id, multiply words/ids
+    words = [(i, word) for i, pair in enumerate(words_ * id_mul) for word in pair] * word_mul
+    return words
+
+
+if __name__ == "__main__":
+    import timing  # noqa
+
+    words = _words()
+    added = index(words)
+
+    assert added == set(i for i, _ in words)
+
+    len_added, len_input = len(added), len(words)
+
+    info = analyze(TRIE)
+    # show(TRIE)
+
+    # `total_size` eats memory too
+    print(
+        f"""
+Input words: {len_input}
+Added ids: {len_added} ({len_added / len_input:.2%})
+Tree Size: {total_size(TRIE)}
+Index Size: {total_size(added)}
+Info: {dict(info)}
+    """
+    )

@@ -7,6 +7,10 @@ verify_ssl = true
 python_version = "3.7"
 
 [packages]
+tqdm = "*"
 
 [dev-packages]
 black = "==19.3b0"
+"flake8" = "*"
+memory-profiler = "*"
+matplotlib = "*"
