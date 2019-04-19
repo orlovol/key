@@ -7,17 +7,12 @@ Keys should be unique, values - any alphanumeric sequences
 
 
 from tqdm import tqdm
-from typing import Iterator, Iterable, Tuple, Set
+from typing import Iterator, Iterable, Set
 from functools import partial
 from itertools import chain
 from collections import defaultdict
 
-from . import utils
-
-try:
-    profile()
-except NameError:
-    profile = lambda x: x  # noqa
+from . import utils, geo
 
 
 def rec_dd():
@@ -38,7 +33,7 @@ def collect(node: dict) -> Set[int]:
     return set(_collect(node))
 
 
-def _show(node, prefix=""):
+def _show(node: dict, prefix=""):
     """Recursively simple-print trie structure"""
     print(prefix)
     for key in node.keys():
@@ -48,27 +43,30 @@ def _show(node, prefix=""):
             _show(node[key], prefix + key)
 
 
-def _analyze(node, info=defaultdict(int)):
+def _analyze(node: dict, info=defaultdict(int)):
     """Recursively collect tree info - key-nodes & item ids"""
     for key in node.keys():
         if key == ITEMSKEY:
-            info["ids"] += len(node[key])
+            info["item_nodes"] += 1
+            info["item_count"] += len(node[key])
         else:
-            info["nodes"] += 1
+            info["prefix_nodes"] += 1
             _analyze(node[key], info)
     return info
 
 
-def analyze(node, sizes=False):
-    """Collect tree info - key-nodes & item ids, ratio, size"""
+def analyze(node: dict, sizes=False):
+    """Gather tree info - key-nodes & item ids, ratio, sizes"""
     info = _analyze(node)
-    info["ratio"] = round(info["ids"] / info["nodes"], 2)
+    # simple ratio of item nodes to letter nodes
+    info["item_mean"] = round(info["item_count"] / info["item_nodes"], 2)
+    info["node_ratio"] = round(info["item_nodes"] / info["prefix_nodes"], 2)
 
     if sizes:  # `utils.total_size` eats memory
         info["trie_size"] = utils.total_size(node)
         info["index_size"] = utils.total_size(list(_collect(node)))
         # ! same as above, without tree traversal, but with magic constant
-        info["index_size2"] = utils.sizeof_fmt(10 * info["ids"])
+        info["index_size2"] = utils.sizeof_fmt(10 * info["item_count"])
 
     return dict(info)
 
@@ -84,6 +82,8 @@ def lookup(node: dict, query: str) -> Iterable[int]:
 
 def suffixes(word: str) -> Iterator[str]:
     """Return all suffixes of the word"""
+    if not word:
+        return
     for i, _ in enumerate(word):
         yield word[i:]
 
@@ -98,15 +98,22 @@ class Trie:
         self.collect = partial(collect, self.root)
         self.lookup = partial(lookup, self.root)
 
-    @profile
-    def index(self, items: Iterable[Tuple[int, str]]) -> Set[int]:
-        """Add items to the trie"""
-        for id_, word in tqdm(items):  # * progressbar eats memory, but helps a lot
-            word, *_ = word.partition(" ")  # ! TODO: don't index `type`
-            for suffix in suffixes(word):
-                self.add(id_, suffix)
+    @utils.profile
+    def index(self, items: Iterable[geo.GeoItem]) -> None:
+        """Add collection of geo items to the trie"""
+        for item in tqdm(items):  # * progressbar eats memory, but helps a lot
+            self.add_item(item)
 
-    def add(self, id_: int, word: str) -> None:
+    def add_item(self, item: geo.GeoItem):
+        """Add geo item names to trie
+        Add whole word, and all possible suffixes
+        """
+        for name in (item.name, item.name_uk):  # Name
+            # Name is iterable namedtuple: name, old_name, type
+            for suffix in chain.from_iterable(map(suffixes, name)):
+                self.add_word(item.geo_id, suffix)
+
+    def add_word(self, id_: int, word: str) -> None:
         """Split word into characters and add nested nodes to the trie.
         Append id_ to `items` list in the final node."""
 
@@ -119,87 +126,6 @@ class Trie:
         items = node.setdefault(ITEMSKEY, list())
         if id_ not in items:
             items.append(id_)
-
-
-@profile
-def _make_items():
-    """Test method to create some items"""
-
-    words_ = [
-        ("Винницкая область", "Вінницька область"),
-        ("Волынская область", "Волинська область"),
-        ("Днепропетровская область", "Дніпропетровська область"),
-        ("Донецкая область", "Донецька область"),
-        ("Житомирская область", "Житомирська область"),
-        ("Закарпатская область", "Закарпатська область"),
-        ("Запорожская область", "Запорізька область"),
-        ("Ивано-Франковская область", "Івано-Франківська область"),
-        ("Киевская область", "Київська область"),
-        ("Кировоградская область", "Кіровоградська область"),
-        ("Крым", "Крим"),
-        ("Луганская область", "Луганська область"),
-        ("Львовская область", "Львівська область"),
-        ("Николаевская область", "Миколаївська область"),
-        ("Одесская область", "Одеська область"),
-        ("Полтавская область", "Полтавська область"),
-        ("Ровенская область", "Рівненська область"),
-        ("Сумская область", "Сумська область"),
-        ("Тернопольская область", "Тернопільська область"),
-        ("Харьковская область", "Харківська область"),
-        ("Херсонская область", "Херсонська область"),
-        ("Хмельницкая область", "Хмельницька область"),
-        ("Черкасская область", "Черкаська область"),
-        ("Черниговская область", "Чернігівська область"),
-        ("Черновицкая область", "Чернівецька область"),
-    ]
-
-    id_mul = 1  # * same words, more ids
-    word_mul = 1  # * more words, same ids
-
-    # unpack language pairs with same id, multiply words/ids
-    words = [(i, word) for i, pair in enumerate(words_ * id_mul) for word in pair] * word_mul
-    return words
-
-
-def _repl(lookup, items):
-    query = "Enter query (empty to exit):"
-    print(query)
-    while query:
-        query = input("> ")
-        if query:
-            res = lookup(query)
-            print([items[r] for r in res])
-    print("Bye!")
-
-
-if __name__ == "__main__":
-    import sys
-
-    interactive = len(sys.argv) > 1
-
-    if not interactive:
-        from . import timing  # noqa
-
-    items = _make_items()
-
-    trie = Trie(items)
-    added = trie.collect()
-
-    len_items, len_added = len(items), len(added)
-
-    info = "\n".join(f"{key.title()}: {value}" for key, value in trie.analyze(sizes=True).items())
-
-    print(
-        f"""\
-Input words: {len_items}
-Added ids: {len_added} ({len_added / len_items:.2%})
-{info}
-    """
-    )
-
-    # _show(trie.root)
-    if interactive:
-        _repl(trie.lookup, dict(items))  # dict removes duplicated ids (multiple languages)
 
 
 __all__ = ["Trie"]

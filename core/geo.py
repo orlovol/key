@@ -104,7 +104,7 @@ class Region(GeoItem):
 
         if parent:
             parent_name: Name = make_name(parent._re_keys, match)
-            # print(parent_name, parent.registry) # need grandname
+            # print(parent_name, parent.registry) #! need grandname
             parent: GeoItem = parent.registry.get(parent_name.name, None)
 
         return super().__new__(cls, geo_id=geo_id, name=name, name_uk=name_uk, parent=parent)

@@ -4,6 +4,17 @@ from itertools import chain
 from collections import deque
 
 
+def empty_profile(f):
+    return f
+
+
+# catch nameerror when mprof is not used
+try:
+    profile = profile
+except NameError:
+    profile = empty_profile
+
+
 _HANDLERS = {
     tuple: iter,
     list: iter,
