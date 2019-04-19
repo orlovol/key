@@ -47,4 +47,4 @@ def total_size(obj):
     return sizeof_fmt(sizeof(obj))
 
 
-__all__ = ["total_size"]
+__all__ = ["total_size", "sizeof_fmt"]
