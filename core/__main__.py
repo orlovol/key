@@ -2,17 +2,13 @@ import sys
 import pathlib
 from pprint import pprint
 
-from . import parse, geo, trie, utils
+from . import parse, trie, utils
 
 # latin to cyrillic keyboard layout map
-keymap = str.maketrans(
-    r"qwertyuiop[]asdfghjkl;'zxcvbnm,./",
-    r"йцукенгшщзхъфывапролджэячсмитьбю."
-)
+keymap = str.maketrans(r"qwertyuiop[]asdfghjkl;'zxcvbnm,./", r"йцукенгшщзхъфывапролджэячсмитьбю.")
 
 keymap_uk = str.maketrans(
-    r"qwertyuiop[]\asdfghjkl;'zxcvbnm,./",
-    r"йцукенгшщзхїґфівапролджєячсмитьбю."
+    r"qwertyuiop[]\asdfghjkl;'zxcvbnm,./", r"йцукенгшщзхїґфівапролджєячсмитьбю."
 )
 
 # * language prefernce might be specified somewhere
@@ -47,10 +43,7 @@ def repl(lookup, items):
 def iter_items():
     geofile = pathlib.Path(__file__).parent / "data/geo.csv"
     for row in parse.read_csv(geofile):
-        # if isinstance(row, (geo.City,)):
-        # if isinstance(row, (geo.Region,)):
-        if type(row) == geo.Region:
-            yield row
+        yield row
 
 
 @utils.profile
@@ -62,23 +55,24 @@ def main():
     geotrie = trie.Trie()
 
     items = list(iter_items())  # * used twice, so wrap in list
+    # pprint(items)
     geotrie.index(items)
     # ! FIXME: use readable name for repl, but whole record for output
     # ! FIXME: optimize index/registry usages
-    geoindex = {item.geo_id: item.regname for item in items}
+    geoindex = {item.geo_id: item for item in items}
 
-    info = "\n".join(
-        f"{key.title()}: {value}" for key, value in sorted(geotrie.info.items())
-    )
+    info = "\n".join(f"{key.title()}: {value}" for key, value in sorted(geotrie.info.items()))
     print(f"\n{info}\n")
 
-    # trie._show(geotrie.root)
+    # # geotrie.show()
     if interactive:
         repl(geotrie.lookup, geoindex)
 
     # pprint(geoindex)
     # pprint(geo.Region.registry)
-    # pprint(geo.Raion.registry)
 
+
+# TODO: add parents to objects
+# TODO: add geotype to trie, search for old name only
 
 main()

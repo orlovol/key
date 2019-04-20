@@ -1,33 +1,24 @@
-import re
+# import re
+import regex
 import typing
-import collections
 
-LEVEL_SEP = ", "
-NAME_RE = r"[\w-]+(?: +[\w-]+)*?"  # words with hyphens and digits
+WORD_SEP = ", "
+# WORD_RE = r"[\w-]+(?: +[\w-]+)*?"  # words with hyphens and digits
+WORD_RE = (
+    r"[[:upper:]][\w-]+(?: +[[:upper:]][\w-]+)*?"
+)  # words with hyphens and digits # city type fix - first letter uppercase
 
+NAME_RE = fr"(?P<name>{WORD_RE})"
+OLDNAME_RE = fr"\(\s*(?P<oldname>{WORD_RE})\s*\)"
+FULLNAME_RE = fr"{NAME_RE}\s*(?:{OLDNAME_RE}\s*)?"
+FULLNAME = regex.compile(FULLNAME_RE)
 
-def cut(string, left="", right=""):
-    if string.startswith(left) and string.endswith(right):
-        return string[len(left) : -len(right) or None]
-    return string
-
-
-def geoname_re_keys(name):
-    return [f"{name}_{key}" for key in "name old type".split()]
-
-
-def geoname_re(type_, type_name):
-    name = fr"(?P<{type_}_name>{NAME_RE})"
-    old_name = fr"\(\s*(?P<{type_}_old>{NAME_RE})\s*\)"
-    # regex = fr"(?:{name}\s*(?:{old_name}\s*)?(?P<{type_}_type>{type_name})?)?\s*"
-    regex = fr"{name}\s*(?:{old_name}\s*)?(?P<{type_}_type>{type_name})?\W*"
-    return regex
+RAIONKEY = "район"  # multilingual unique key
 
 
 class Name(typing.NamedTuple):
     name: str
     old_name: str
-    type_: str
 
     def __str__(self):
         return f"{self.name} ({self.old_name})" if self.old_name else self.name
@@ -35,13 +26,9 @@ class Name(typing.NamedTuple):
     def __repr__(self):
         return f'"{self}"'
 
-    @property
-    def full(self):
-        return f"{self} {self.type_}" if self.type_ else self
 
-
-def make_name(keys, match):
-    return Name(*match.group(*keys))
+def make_name(match):
+    return Name(*match.group("name", "oldname"))
 
 
 class GeoType(typing.NamedTuple):
@@ -58,84 +45,99 @@ class GeoMeta(type):
         geo = super().__new__(cls, name, bases, dct)
         parent = bases[0]  # assume that we subclass one GeoItem at a time, to avoid fold/reduce
         if parent is not GeoType:
-            try:
-                pattern = parent.regex.pattern
-            except AttributeError:
-                pattern = ""
-
             geo._name = name.lower()
-            geo._re_keys = geoname_re_keys(geo._name)
-            geo.regex = re.compile(pattern + geoname_re(geo._name, geo.type_name))
             geo.registry = {}  # dictionary of created objects
-
             cls.registry[geo._name] = geo
         return geo
 
 
 class GeoItem(GeoType, metaclass=GeoMeta):
     _name: str = None  # class lowercase name - csv key
-    type_name: str = ""  # geo entity type suffix
-    parent: "GeoItem" = None
-    children = {}  # FIXME: global for all classes
 
-    def __new__(cls, *args, **kwargs):
-        parent = kwargs.pop("parent")
-        obj = super().__new__(cls, *args, **kwargs)
-        if parent:
-            parent.children[obj.name.name] = obj
-            cls.parent = parent
-        cls.registry[obj.name.name] = obj
+    def __new__(cls, geo_id, name, name_uk):
+        dname = cls.parse(name.split(WORD_SEP))
+        dname_uk = cls.parse(name_uk.split(WORD_SEP))
+
+        if cls._name == "address":
+            name = dname[cls._name]
+            name_uk = dname_uk[cls._name]
+        else:
+            match = FULLNAME.search(dname[cls._name])
+            match_uk = FULLNAME.search(dname_uk[cls._name])
+            name = make_name(match)
+            name_uk = make_name(match_uk)
+
+        obj = super().__new__(cls, geo_id, name, name_uk)
+        if cls._name != "address":
+            cls.registry[obj.name.name] = obj
         return obj
-
-    @property
-    def regname(self):
-        return self.name if self.parent is None else f"{self.parent.regname}/{self.name}"
 
 
 class Region(GeoItem):
-    type_name = "область"
-
-    def __new__(cls, geo_id, name, name_uk, parent=None):
-        match = cls.regex.fullmatch(name)
-        match_uk = cls.regex.fullmatch(name_uk)
-
-        name = make_name(cls._re_keys, match)
-        name_uk = make_name(cls._re_keys, match_uk)
-
-        if parent:
-            parent_name: Name = make_name(parent._re_keys, match)
-            # print(parent_name, parent.registry) #! need grandname
-            parent: GeoItem = parent.registry.get(parent_name.name, None)
-
-        return super().__new__(cls, geo_id=geo_id, name=name, name_uk=name_uk, parent=parent)
+    @staticmethod
+    def parse(words):
+        region, *_ = words
+        return dict(region=region)
 
 
-class Raion(Region):
-    type_name = "район"
+class Raion(GeoItem):
+    @staticmethod
+    def parse(words):
+        *init, raion = words
+        sub = Region.parse(init)
+        return dict(sub, raion=raion)
 
-    def __new__(cls, geo_id, name, name_uk, parent=Region):
-        return super().__new__(cls, geo_id, name, name_uk, parent=parent)
 
+class City(GeoItem):
+    @staticmethod
+    def parse(words):
+        *init, city = words
 
-class City(Raion):
-    def __new__(cls, geo_id, name, name_uk):
-        return super().__new__(cls, geo_id, name, name_uk, parent=Raion)
+        if len(init) == 1:  # city
+            sub = Region.parse(init)
+        elif len(init) == 2:  # town
+            sub = Raion.parse(init)
+        else:
+            raise ValueError(f"Problem with city: {words}")
+
+        return dict(sub, city=city)
 
 
 class District(GeoItem):
-    pass
+    @staticmethod
+    def parse(words):
+        *init, district = words
+        sub = City.parse(init)
+        return dict(sub, district=district)
 
 
 class MicroDistrict(GeoItem):
-    pass
+    @staticmethod
+    def parse(words):
+        *init, microdistrict = words
+        sub = City.parse(init)
+        return dict(sub, microdistrict=microdistrict)
 
 
 class Street(GeoItem):
-    pass
+    @staticmethod
+    def parse(words):
+        *init, street = words
+
+        if len(init) == 2 or init[1].endswith(RAIONKEY):
+            sub = City.parse(init)
+        else:
+            sub = District.parse(init)
+
+        return dict(sub, street=street)
 
 
 class Address(GeoItem):
-    pass
+    @staticmethod
+    def parse(words):
+        *init, address = words
+        sub = Street.parse(init)
+        return dict(sub, address=address)
 
 
 TYPES = GeoMeta.registry
