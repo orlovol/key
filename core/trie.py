@@ -40,7 +40,7 @@ def _collect(node: dict) -> Iterable[int]:
 
 
 def collect(node: dict) -> Set[int]:
-    """Сollect items on specified tree node into set"""
+    """Collect items on specified tree node into set"""
     return set(_collect(node))
 
 
@@ -54,21 +54,22 @@ def _show(node: dict, prefix=""):
             _show(node[key], prefix + key)
 
 
-def _analyze(node: dict, info=defaultdict(int)):
-    """Recursively collect tree info - key-nodes & item ids"""
+def _analyze(node: dict, depth=0, info=defaultdict(int)):
+    """Helper that recursively collects tree info - node counts"""
+    info["depth"] = max(info["depth"], depth)
     for key in node.keys():
         if key == ITEMSKEY:
             info["item_nodes"] += 1
             info["item_count"] += len(node[key])
         else:
             info["prefix_nodes"] += 1
-            _analyze(node[key], info)
+            _analyze(node[key], depth + 1, info)
     return info
 
 
 def analyze(node: dict, sizes=False):
     """Gather tree info - key-nodes & item ids, ratio, sizes"""
-    info = _analyze(node)
+    info = _analyze(node, 0)
     info["item_mean"] = round(info["item_count"] / info["item_nodes"], 2)
     info["node_ratio"] = round(info["item_nodes"] / info["prefix_nodes"], 2)
 
@@ -101,14 +102,16 @@ def suffixes(word: str) -> Iterator[str]:
 class Trie:
     def __init__(self, items=None):
         self.root = rec_dd()
-        if items:
-            self.index(items)
-
         self._alphabet = set()
         self._indexed_items = 0
 
+        # methods
         self.collect = partial(collect, self.root)
         self.lookup = partial(lookup, self.root)
+        self.show = partial(_show, self.root)
+
+        if items:
+            self.index(items)
 
     @property
     def alphabet(self):
@@ -117,8 +120,8 @@ class Trie:
     @property
     def info(self):
         info = analyze(self.root, sizes=True)
-        info['alphabet'] = self.alphabet
-        info['indexed'] = self._indexed_items
+        info["alphabet"] = self.alphabet
+        info["indexed"] = self._indexed_items
         return info
 
     @utils.profile
@@ -130,7 +133,7 @@ class Trie:
 
     def add_item(self, item: geo.GeoItem):
         """Add geo item names to trie
-        Add whole word, and all possible suffixes
+        Add whole word, and all its suffixes
         """
         for name in (item.name, item.name_uk):  # Name
             # Name is iterable namedtuple: name, old_name, type
@@ -152,7 +155,6 @@ class Trie:
             items = node.setdefault(ITEMSKEY, list())
             if id_ not in items:
                 items.append(id_)
-
 
 
 __all__ = ["Trie"]
