@@ -40,6 +40,7 @@ def repl(lookup, items):
                     print(f"Did you mean _{tr}_?")
                     break
         print([items[r] for r in res])
+
     print("Bye!")
 
 
@@ -61,25 +62,15 @@ def main():
     geotrie = trie.Trie()
 
     items = list(iter_items())  # * used twice, so wrap in list
-
     geotrie.index(items)
     # ! FIXME: use readable name for repl, but whole record for output
     # ! FIXME: optimize index/registry usages
     geoindex = {item.geo_id: item.regname for item in items}
 
-    added = geotrie.collect()
-    len_items, len_added = len(geoindex), len(added)
     info = "\n".join(
-        f"{key.title()}: {value}" for key, value in geotrie.analyze(sizes=True).items()
+        f"{key.title()}: {value}" for key, value in sorted(geotrie.info.items())
     )
-
-    print(
-        f"""
-Input items: {len_items}
-Added items: {len_added} ({len_added / len_items:.2%})
-{info}
-    """
-    )
+    print(f"\n{info}\n")
 
     # trie._show(geotrie.root)
     if interactive:
