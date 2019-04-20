@@ -16,7 +16,8 @@ class Row(typing.NamedTuple):
         try:
             geocls = geo.TYPES[geo_type]
             return geocls(int(geo_id), *names)
-        except:  # unsupported GeoItem, default to simple Row
+        except Exception as e:  # unsupported GeoItem, default to simple Row
+            print(e)
             return cls(*row)
 
 

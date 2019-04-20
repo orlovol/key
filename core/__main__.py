@@ -2,11 +2,10 @@ import sys
 import pathlib
 from pprint import pprint
 
-from . import parse, trie, utils
+from . import parse, geo, trie, utils
 
 # latin to cyrillic keyboard layout map
 keymap = str.maketrans(r"qwertyuiop[]asdfghjkl;'zxcvbnm,./", r"йцукенгшщзхъфывапролджэячсмитьбю.")
-
 keymap_uk = str.maketrans(
     r"qwertyuiop[]\asdfghjkl;'zxcvbnm,./", r"йцукенгшщзхїґфівапролджєячсмитьбю."
 )
@@ -69,10 +68,13 @@ def main():
         repl(geotrie.lookup, geoindex)
 
     # pprint(geoindex)
-    # pprint(geo.Region.registry)
+
+    classes = sorted(geo.GeoMeta.registry.values(), key=lambda cls: cls.order)
+    for cls in classes:
+        print(cls._name)
+        pprint(cls.registry)
 
 
 # TODO: add parents to objects
-# TODO: add geotype to trie, search for old name only
 
 main()
