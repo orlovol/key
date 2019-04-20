@@ -14,10 +14,6 @@ from collections import defaultdict
 from . import utils, geo
 
 
-def rec_dd():
-    return defaultdict(rec_dd)
-
-
 ITEMSKEY = "_items"
 
 
@@ -116,7 +112,7 @@ def suffixes(word: str) -> Iterator[str]:
 
 class Trie:
     def __init__(self, items=None):
-        self.root = rec_dd()
+        self.root = utils.rec_dd()
         self._alphabet = set()
         self._indexed_items = 0
 

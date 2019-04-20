@@ -1,7 +1,7 @@
 import sys
 
 from itertools import chain
-from collections import deque
+from collections import deque, defaultdict
 
 
 def empty_profile(f):
@@ -56,6 +56,11 @@ def total_size(obj):
         return s
 
     return sizeof_fmt(sizeof(obj))
+
+
+def rec_dd():
+    """Recursive defaultdict"""
+    return defaultdict(rec_dd)
 
 
 __all__ = ["total_size", "sizeof_fmt"]
