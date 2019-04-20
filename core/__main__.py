@@ -6,8 +6,17 @@ from . import parse, geo, trie, utils
 
 # latin to cyrillic keyboard layout map
 keymap = str.maketrans(
-    r"qwertyuiop[]]\assdfghjkl;''zxcvbnm,./", r"йцукенгшщзхїъґфыівапролджєэячсмитьбю."
+    r"qwertyuiop[]asdfghjkl;'zxcvbnm,./",
+    r"йцукенгшщзхъфывапролджэячсмитьбю."
 )
+
+keymap_uk = str.maketrans(
+    r"qwertyuiop[]\asdfghjkl;'zxcvbnm,./",
+    r"йцукенгшщзхїґфівапролджєячсмитьбю."
+)
+
+# * language prefernce might be specified somewhere
+keymaps = (keymap_uk, keymap)
 
 
 def repl(lookup, items):
@@ -18,13 +27,19 @@ def repl(lookup, items):
             query = input("> ")
         except (EOFError, KeyboardInterrupt):
             break
-        if query:
-            tr = query.translate(keymap)
-            if query != tr:
-                print(f"Did you mean _{tr}_?")
-                query = tr
-            res = lookup(query)
-            print([items[r] for r in res])
+
+        if not query:
+            continue
+
+        res = lookup(query)
+        if not res:
+            for m in keymaps:
+                tr = query.translate(m)
+                res = lookup(tr)
+                if res:
+                    print(f"Did you mean _{tr}_?")
+                    break
+        print([items[r] for r in res])
     print("Bye!")
 
 
