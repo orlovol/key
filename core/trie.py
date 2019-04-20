@@ -6,10 +6,9 @@ Keys should be unique, values - any alphanumeric sequences
 """
 
 
-from tqdm import tqdm
 from typing import Iterator, Iterable, Set
 from functools import partial
-from itertools import chain
+from itertools import chain, combinations
 from collections import defaultdict
 
 from . import utils, geo
@@ -24,7 +23,7 @@ ITEMSKEY = "_items"
 
 def preprocess(word: str) -> str:
     """Simplify word as much as possible"""
-    return word.lower()
+    return word.replace("'", "").lower()
 
 
 def preprocess_words(word: str) -> Iterable[str]:
@@ -71,7 +70,7 @@ def analyze(node: dict, sizes=False):
     """Gather tree info - key-nodes & item ids, ratio, sizes"""
     info = _analyze(node, 0)
     info["item_mean"] = round(info["item_count"] / info["item_nodes"], 2)
-    info["node_ratio"] = round(info["item_nodes"] / info["prefix_nodes"], 2)
+    info["node_type_ratio"] = round(info["item_nodes"] / info["prefix_nodes"], 2)
 
     if sizes:  # * note,`utils.total_size` eats memory
         info["size_trie"] = utils.total_size(node)
@@ -82,13 +81,29 @@ def analyze(node: dict, sizes=False):
     return dict(info)
 
 
-def lookup(node: dict, query: str) -> Iterable[int]:
-    """Move down from specified node, following query, and collect items from there"""
-    for c in preprocess(query):  # TODO: multiword query
-        node = node.get(c)
-        if not node:
-            return set()
-    return collect(node)
+def lookup(root: dict, query: str) -> Set[int]:
+    """Move down from specified root node, following query, and collect items from there"""
+    word_ids = []  # list of sets of ids of items that correspond to query
+    for word in preprocess_words(query):
+        node = root
+        for c in word:
+            node = node.get(c)
+            if not node:
+                # dead-end for this word
+                word_ids.append(set())
+                break
+        else:
+            word_ids.append(collect(node))
+
+    id_sets = len(word_ids)
+    if id_sets > 2:
+        # calculate union of paired intersections
+        return set.union(*(set.intersection(*pair) for pair in combinations(word_ids, 2)))
+
+    if id_sets == 2:
+        return set.intersection(*word_ids)
+
+    return word_ids[0]
 
 
 def suffixes(word: str) -> Iterator[str]:
@@ -124,27 +139,11 @@ class Trie:
         info["indexed"] = self._indexed_items
         return info
 
-    @utils.profile
-    def index(self, items: Iterable[geo.GeoItem]) -> None:
-        """Add collection of geo items to the trie"""
-        for item in tqdm(items):  # * progressbar eats memory, but helps a lot
-            self.add_item(item)
-            self._indexed_items += 1
-
-    def add_item(self, item: geo.GeoItem):
-        """Add geo item names to trie
-        Add whole word, and all its suffixes
-        """
-        for name in (item.name, item.name_uk):  # Name
-            # Name is iterable namedtuple: name, old_name, type
-            for suffix in chain.from_iterable(map(suffixes, name)):
-                self.add_word(item.geo_id, suffix)
-
-    def add_word(self, id_: int, word: str) -> None:
+    def _add_word(self, id_: int, word: str) -> None:
         """Split word into characters and add nested nodes to the trie.
         Append id_ to `items` list in the final node.
-        Word may be splitted into subwords, which are added separately"""
-
+        Word may be splitted into subwords, which are added separately
+        """
         for subword in preprocess_words(word):
             node = self.root
             for c in subword:
@@ -155,6 +154,18 @@ class Trie:
             items = node.setdefault(ITEMSKEY, list())
             if id_ not in items:
                 items.append(id_)
+
+    def add(self, item: geo.GeoItem):
+        """Add geo item names to trie
+        Add whole word, and all its suffixes
+        """
+        for name in (item.name, item.name_uk):  # Name
+            # Name is iterable namedtuple: name, old_name
+            for suffix in chain.from_iterable(map(suffixes, name)):
+                self._add_word(item.geo_id, suffix)
+
+        self._indexed_items += 1
+        return True
 
 
 __all__ = ["Trie"]

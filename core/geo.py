@@ -1,5 +1,6 @@
 import re
 import typing
+from collections import OrderedDict
 
 WORD_SEP = ", "
 RAIONKEY = "район"  # multilingual unique key for raion/district
@@ -13,7 +14,7 @@ class Name(typing.NamedTuple):
     old_name: str
 
     def __str__(self):
-        return f"{self.name} #{self.old_name}" if self.old_name else self.name
+        return f"{self.name} ~{self.old_name}" if self.old_name else self.name
 
     def __repr__(self):
         return f'"{self}"'
@@ -26,7 +27,7 @@ class GeoType(typing.NamedTuple):
 
 
 class GeoMeta(type):
-    registry = {}
+    _registry = {}
 
     def __new__(cls, name, bases, dct):
         """Called for each GeoItem class"""
@@ -34,8 +35,7 @@ class GeoMeta(type):
         parent = bases[0]  # assume that we subclass one GeoItem at a time, to avoid fold/reduce
         if parent is not GeoType:
             geo._name = name.lower()
-            geo.registry = {}  # add registry of created geo-objects to geotype
-            cls.registry[geo._name] = geo  # add geotype registry to meta
+            cls._registry[geo._name] = geo  # add geotype registry to meta
         return geo
 
 
@@ -43,19 +43,17 @@ class GeoItem(GeoType, metaclass=GeoMeta):
     _name: str = None  # class lowercase name - csv key
 
     def __new__(cls, geo_id, name, name_uk):
-        name = cls.get_name(name)
-        name_uk = cls.get_name(name_uk)
+        name, path = cls.get_name(name)
+        name_uk, path_uk = cls.get_name(name_uk)
         obj = super().__new__(cls, geo_id, name, name_uk)
-
-        if cls != Address:
-            cls.registry[obj.name.name] = obj
-
+        obj.path = path
+        obj.path_uk = path_uk
         return obj
 
     @classmethod
     def get_name(cls, string):
-        dname = cls.parse(string.split(WORD_SEP))
-        word = dname[cls._name]
+        path = cls.parse(string.split(WORD_SEP))
+        word = path.pop(cls._name)
         oldname = None
 
         def repl(match):
@@ -65,7 +63,7 @@ class GeoItem(GeoType, metaclass=GeoMeta):
 
         name = OLDNAME.sub(repl, word, 1)
         name_obj = Name(name, oldname)
-        return name_obj
+        return name_obj, path
 
 
 class Region(GeoItem):
@@ -94,9 +92,9 @@ class City(GeoItem):
     def parse(cls, words):
         *init, city = words
 
-        if len(init) == 1:  # city
+        if len(init) == 1:  # region.city
             sub = Region.parse(init)
-        elif len(init) == 2:  # town
+        elif len(init) == 2:  # region.raion.city (town)
             sub = Raion.parse(init)
         else:
             raise ValueError(f"Problem with city: {words}")
@@ -149,4 +147,8 @@ class Address(GeoItem):
         return dict(sub, address=address)
 
 
-TYPES = GeoMeta.registry
+# * py3.7 keeps dict insertion order, but use OrderedDict+order TO:
+# * secure against order of GeoItem declarations
+# * secure against older python versions
+# * allow specific ordering
+TYPES = OrderedDict(sorted(GeoMeta._registry.items(), key=lambda item: item[1].order))
