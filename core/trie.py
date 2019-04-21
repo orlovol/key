@@ -15,14 +15,13 @@ from . import utils, geo
 
 
 ITEMSKEY = "_items"
+SUFFIXKEY = "_suffix"
+KEYS = {ITEMSKEY, SUFFIXKEY}
 
 
 def preprocess(word: str) -> str:
     """Simplify word as much as possible"""
-    replacements = [
-        ("'", ""),
-        ("ё", "е")  # ? bad idea, but it's so rarely used
-    ]
+    replacements = [("'", ""), ("ё", "е")]  # ? bad idea, but ё is so rarely used
     for p in replacements:
         word = word.replace(*p)
     return word.lower()
@@ -34,23 +33,24 @@ def preprocess_words(word: str) -> Iterable[str]:
     return (preprocess(w) for w in word.split())
 
 
-def _collect(node: dict) -> Iterable[int]:
+def _collect(node: dict, exact: bool) -> Iterable[int]:
     """Recursively collect items on specified tree node"""
-    keys = set(node.keys()) - {ITEMSKEY}
-    return chain(node.get(ITEMSKEY, []), *(_collect(node[key]) for key in keys))
+    keys = set(node.keys()) - KEYS  # only prefix nodes
+    suffixes = [] if exact else node.get(SUFFIXKEY, [])
+    return chain(suffixes, node.get(ITEMSKEY, []), *(_collect(node[key], exact) for key in keys))
 
 
-def collect(node: dict) -> Set[int]:
+def collect(node: dict, exact: bool) -> Set[int]:
     """Collect items on specified tree node into set"""
-    return set(_collect(node))
+    return set(_collect(node, exact))
 
 
 def _show(node: dict, prefix=""):
     """Recursively simple-print trie structure"""
     print(prefix)
     for key in node.keys():
-        if key == ITEMSKEY:
-            print(f"{prefix}{ITEMSKEY}: {node[key]}")
+        if key in {ITEMSKEY, SUFFIXKEY}:
+            print(f"{prefix}{key}: {node[key]}")
         else:
             _show(node[key], prefix + key)
 
@@ -62,6 +62,9 @@ def _analyze(node: dict, depth=0, info=defaultdict(int)):
         if key == ITEMSKEY:
             info["item_nodes"] += 1
             info["item_count"] += len(node[key])
+        elif key == SUFFIXKEY:
+            info["suffix_nodes"] += 1
+            info["suffix_count"] += len(node[key])
         else:
             info["prefix_nodes"] += 1
             _analyze(node[key], depth + 1, info)
@@ -71,20 +74,20 @@ def _analyze(node: dict, depth=0, info=defaultdict(int)):
 def analyze(node: dict, sizes=False):
     """Gather tree info - key-nodes & item ids, ratio, sizes"""
     info = _analyze(node, 0)
-    if info['depth']:
+    if info["depth"]:
         info["item_mean"] = round(info["item_count"] / info["item_nodes"], 2)
         info["node_type_ratio"] = round(info["item_nodes"] / info["prefix_nodes"], 2)
 
         if sizes:  # * note,`utils.total_size` eats memory
             info["size_trie"] = utils.total_size(node)
-            info["size_index"] = utils.total_size(list(_collect(node)))
+            info["size_index"] = utils.total_size(list(_collect(node, exact=False)))
             # ! same as above, without tree traversal, but with magic constant
             info["size_index2"] = utils.sizeof_fmt(10 * info["item_count"])
 
     return dict(info)
 
 
-def lookup(root: dict, query: str) -> Set[int]:
+def lookup(root: dict, query: str, exact: bool = False) -> Set[int]:
     """Move down from specified root node, following query, and collect items from there"""
     if not query:
         return set()
@@ -99,7 +102,7 @@ def lookup(root: dict, query: str) -> Set[int]:
                 word_ids.append(set())
                 break
         else:
-            word_ids.append(collect(node))
+            word_ids.append(collect(node, exact))
 
     id_sets = len(word_ids)
     if id_sets > 2:
@@ -145,7 +148,7 @@ class Trie:
         info["indexed"] = self._indexed_items
         return info
 
-    def _add_word(self, id_: int, word: str) -> None:
+    def _add_word(self, id_: int, word: str, key: str) -> None:
         """Split word into characters and add nested nodes to the trie.
         Append id_ to `items` list in the final node.
         Word may be splitted into subwords, which are added separately
@@ -157,7 +160,7 @@ class Trie:
                 node = node[c]
             # we can't have two different words with same tree-path
             # but they can have multiple ids, so let's keep them in a list
-            items = node.setdefault(ITEMSKEY, list())
+            items = node.setdefault(key, list())
             if id_ not in items:
                 items.append(id_)
 
@@ -167,8 +170,9 @@ class Trie:
         """
         for name in item.name:  # Name objects
             # Name is iterable namedtuple: name, old_name
-            for suffix in chain.from_iterable(map(suffixes, name)):
-                self._add_word(item.id, suffix)
+            for i, suffix in enumerate(chain.from_iterable(map(suffixes, name))):
+                key = SUFFIXKEY if i else ITEMSKEY
+                self._add_word(item.id, suffix, key)
 
         self._indexed_items += 1
         return True

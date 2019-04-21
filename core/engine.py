@@ -32,6 +32,7 @@ class Engine:
         self._trie = trie.Trie()
         self._index = {}  # {item_id: item}
         self._parents = {}  # {child_id: one nearest parent_id}
+        self._fixup_counter = 0
 
         self.lookup = self._trie.lookup
 
@@ -83,6 +84,26 @@ class Engine:
         # * Add to flat item index
         self._index[item.id] = item.name
 
+        # * item has parents - GeoNames
+        # * check if we have them in index as GeoItems
+        parent = item.name.parent
+        while parent:
+            res = self._trie.lookup(parent.name.name, exact=True)  # one lang for now
+            if not res:
+                # Parent is not in index, add it
+                self._fixup_counter -= 1
+                parent_item = geo.GeoItem(id=self._fixup_counter, name=parent)
+                self.add(parent_item)
+
+            if len(res) > 1:  # ambiguous match, detect correct parent
+                print()
+                print(parent, item.name)
+                pprint.pprint({i: self._index.get(i) for i in res})
+                pass
+
+            parent = parent.parent
+
+        """_COMMENTED_
         # get level-ids dictionary
         level_ids = {}  # ? we should have same path for languages?
         for lang_path in (item.path, item.path_uk):
@@ -106,7 +127,8 @@ class Engine:
             return
 
         # * Add to child-parent id index
-        self._parents[item.geo_id] = parent
+        self._parents[item.id] = parent
+        """
 
     # HELPERS
 
