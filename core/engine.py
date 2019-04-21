@@ -1,6 +1,7 @@
-from tqdm import tqdm
 import pprint
-from typing import Iterable
+from itertools import chain
+from tqdm import tqdm
+from typing import Iterable, Dict, Set
 
 from . import read, geo, trie, utils
 
@@ -29,7 +30,8 @@ def read_items(csv):
 class Engine:
     def __init__(self, file=None):
         self._trie = trie.Trie()
-        self._index = {}
+        self._index = {}  # {item_id: item}
+        self._parents = {}  # {child_id: one nearest parent_id}
 
         self.lookup = self._trie.lookup
 
@@ -43,25 +45,70 @@ class Engine:
         for item in tqdm(items):  # * progressbar eats memory, but helps a lot
             self.add(item)
 
-    def add(self, item):
+    def get_parents(self, pathdict: Dict[str, Set[int]]) -> Dict[int, Set[int]]:
+        "Return dict of parent ids, grouped by order/geotype level"
+        return {
+            geo.ORDERS[geotype]: self._trie.lookup(string)
+            for geotype, string in pathdict.items()
+        }
+
+    def resolve_parent(self, level_ids: Dict[int, Set[int]]) -> int:
+        """Split into lowest and highest parent ids.
+        Lookup parents from bottom until we meet the top.
+        Return the lowest parent that has the same n-parent as the top id.
+        """
+        # order geotypes/keys from bottom to top (increasing area)
+        *low_levels, top_level = sorted(level_ids, reverse=True)
+        top_ids = level_ids[top_level]
+
+        if len(top_ids) > 1:
+            raise ValueError(f"Top level has more than one value {top_level}")
+
+        # save lowest level ids, to track their path upward
+        paths = {i: i for i in level_ids[low_levels[0]]}
+
+        # find parent ids from lower level ids, moving upwards
+        for level in low_levels:
+            for k, v in paths.items():
+                parent = self._parents.get(v)
+                if parent in top_ids:
+                    return k
+                paths[k] = parent
+
+        # missing some middle path element
+        raise ValueError(f"Can't resolve parent from {level_ids}: {paths}")
+
+
+    def add(self, item: geo.GeoItem):
         self._trie.add(item)
 
-        # get parent ids and add to them
-        if item._name == "city":
-            for lang_path in (item.path, item.path_uk):
-                parent_ids = set()
-                for key in geo.TYPES.keys():  # ordered top-bottom lookup
-                    try:
-                        path = lang_path[key]
-                    except KeyError:
-                        # no parent level for this key, it's okay
-                        continue
-                    else:
-                        ids = self._trie.lookup(path)
-                        parent_ids |= ids
-
-        # ! flat index for now, TODO: nested index
+        # * Add to flat item index
         self._index[item.geo_id] = item
+
+        # get level-ids dictionary
+        level_ids = {}  # ? we should have same path for languages?
+        for lang_path in (item.path, item.path_uk):
+            ids = self.get_parents(lang_path)
+            for k, v in ids.items():
+                id_set = level_ids.setdefault(k, set())
+                id_set.update(v)
+
+        parent_ids = set(chain.from_iterable(level_ids.values()))
+        if len(parent_ids) == 1:
+            parent = parent_ids.pop()
+
+        elif level_ids:
+            try:
+                parent = self.resolve_parent(level_ids)
+            except ValueError as e:
+                print(f"Unresolved parent: {item.path} {item.name}\n{e}")
+                return  # data is batman
+
+        else:  # no parents - no place in index
+            return
+
+        # * Add to child-parent id index
+        self._parents[item.geo_id] = parent
 
     def info(self):
         info = "\n".join(
@@ -69,7 +116,8 @@ class Engine:
         )
         print(f"\n{info}\n")
 
-    def filter(self, results):
+    def filter(self, results: Set[int]) -> Dict:
+        """Filter & format search results"""
         res = {}
         count = total = len(results)
         for r in results:
@@ -105,7 +153,7 @@ class Engine:
                         print(f"Did you mean _{tr}_?")
                         break
 
-            # sorted alphabeticatlly =(
+            # * sorted alphabeticatlly =(
             pprint.pprint(self.filter(res))
 
         print("Bye!")

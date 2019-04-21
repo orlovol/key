@@ -151,4 +151,5 @@ class Address(GeoItem):
 # * secure against order of GeoItem declarations
 # * secure against older python versions
 # * allow specific ordering
-TYPES = OrderedDict(sorted(GeoMeta._registry.items(), key=lambda item: item[1].order))
+TYPES = OrderedDict(sorted(GeoMeta._registry.items(), key=lambda p: p[1].order))
+ORDERS = {v._name: v.order for v in GeoMeta._registry.values()}

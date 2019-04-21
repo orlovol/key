@@ -19,7 +19,13 @@ ITEMSKEY = "_items"
 
 def preprocess(word: str) -> str:
     """Simplify word as much as possible"""
-    return word.replace("'", "").lower()
+    replacements = [
+        ("'", ""),
+        ("ё", "е")  # ? bad idea, but it's so rarely used
+    ]
+    for p in replacements:
+        word = word.replace(*p)
+    return word.lower()
 
 
 def preprocess_words(word: str) -> Iterable[str]:
@@ -79,6 +85,9 @@ def analyze(node: dict, sizes=False):
 
 def lookup(root: dict, query: str) -> Set[int]:
     """Move down from specified root node, following query, and collect items from there"""
+    if not query:
+        return set()
+
     word_ids = []  # list of sets of ids of items that correspond to query
     for word in preprocess_words(query):
         node = root
