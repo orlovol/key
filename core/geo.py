@@ -1,6 +1,7 @@
 import re
 from collections import OrderedDict
-from typing import Dict, Iterable, NamedTuple, Optional, Tuple, Iterator
+from dataclasses import dataclass
+from typing import ClassVar, Dict, Iterable, Iterator, NamedTuple, Optional, Tuple
 
 WORD_SEP = ", "
 RAIONKEY = "район"  # bilingual unique key for raion/district
@@ -67,7 +68,7 @@ class GeoItem(metaclass=GeoMeta):
 
     def __init__(self, names: LangNames, parent: Optional["GeoItem"] = None):
         self.name, self.name_uk, *_ = names
-        self.parent = parent
+        self.parent : Optional["GeoItem"] = parent
 
     def __iter__(self):
         """Iterate over Names"""
@@ -89,11 +90,27 @@ class GeoItem(metaclass=GeoMeta):
         raise NotImplementedError("GeoItem is abstract")
 
 
-class GeoRecord(NamedTuple):
+@dataclass(frozen=True)
+class GeoRecord:
     """Container for GeoItem with id"""
 
     id: int
     item: GeoItem
+    registry: ClassVar[Dict[int, "GeoRecord"]] = {}
+
+    def __new__(cls, id, item):
+        try:
+            obj = cls.registry[id]
+
+        except KeyError:
+            obj = object.__new__(cls)
+            cls.registry[id] = obj
+
+        else:
+            if (obj.id == id) != (obj.item == item):
+                raise ValueError(f"Collision with existing {obj}: ({id}, {item})")
+
+        return obj
 
 
 class Region(GeoItem):
