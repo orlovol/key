@@ -1,17 +1,19 @@
 import re
-from typing import NamedTuple, Iterable
 from collections import OrderedDict
+from typing import Dict, Iterable, NamedTuple, Optional, Tuple, Iterator
 
 WORD_SEP = ", "
-RAIONKEY = "район"  # multilingual unique key for raion/district
+RAIONKEY = "район"  # bilingual unique key for raion/district
 
 OLD_NAME_RE = fr"\s*\(\s*(?P<old_name>.*)\s*\)"
 OLD_NAME = re.compile(OLD_NAME_RE)
 
 
 class Name(NamedTuple):
+    """Name definition for item"""
+
     name: str
-    old_name: str
+    old_name: Optional[str]
 
     def __str__(self):
         return f"{self.name} ~{self.old_name}" if self.old_name else self.name
@@ -20,12 +22,8 @@ class Name(NamedTuple):
         return f'"{self}"'
 
 
-class Names(NamedTuple):
-    name: Name
-    name_uk: Name
-
-
-def words_to_names(words: Iterable[str]) -> Names:
+def words_to_names(lang_words: Tuple[str, ...]) -> Iterator[Name]:
+    """Convert tuples of name strings into Name items and wrap into LangNames"""
     old_name = None
 
     def repl(match):
@@ -33,131 +31,160 @@ def words_to_names(words: Iterable[str]) -> Names:
         old_name = match.group("old_name")
         return ""
 
-    names = []
-    for word in words:
+    for lang in lang_words:
         old_name = None
-        name = Name(name=OLD_NAME.sub(repl, word, 1), old_name=old_name)
-        names.append(name)
-    return Names(*names)
+        name = Name(name=OLD_NAME.sub(repl, lang, 1), old_name=old_name)
+        yield name
+
+
+# Multilingual Name collection
+LangNames = Tuple[Name, ...]
+
+
+def to_names(words: Tuple[str, ...]) -> LangNames:
+    return tuple(words_to_names(words))
 
 
 class GeoMeta(type):
-    _registry = {}
+    _registry: Dict[str, "GeoItem"] = {}
 
     def __new__(cls, name, bases, dct):
-        """Called for each GeoItem class"""
+        """Called for each GeoRecord class"""
         geo = super().__new__(cls, name, bases, dct)
-        parent = bases[0]  # assume that we subclass one GeoItem at a time, to avoid fold/reduce
-        if parent is not Names:
+        if bases:
             geo._name = name.lower()
             cls._registry[geo._name] = geo  # add geotype registry to meta
         return geo
 
 
-class GeoName(Names, metaclass=GeoMeta):
+class GeoItem(metaclass=GeoMeta):
     """Simple class that contains name and type, without id"""
 
-    def __new__(cls, names: Iterable[str], parent=None):
-        obj = super().__new__(cls, *names)  # most often it's Names
-        obj.parent = parent
-        return obj
+    order = 0
+    _name = None
+
+    __slots__ = ["name", "name_uk", "parent"]
+
+    def __init__(self, names: LangNames, parent: Optional["GeoItem"] = None):
+        self.name, self.name_uk, *_ = names
+        self.parent = parent
+
+    def __iter__(self):
+        """Iterate over Names"""
+        yield self.name
+        yield self.name_uk
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}("{self.name}")'
 
     @classmethod
-    def from_text(cls, text):
+    def from_texts(cls, *texts: str):
         # tuples of words in all languages for each level
-        level_words = zip(*(word.split(WORD_SEP) for word in text))
-        level_names = map(words_to_names, level_words)
-        return cls.parse(level_names)
+        level_words: Iterable[Tuple[str, ...]] = zip(*(word.split(WORD_SEP) for word in texts))
+        level_names: Iterable[LangNames] = map(to_names, level_words)
+        return cls.parse(*level_names)
+
+    @classmethod
+    def parse(cls, *names: LangNames):
+        raise NotImplementedError("GeoItem is abstract")
 
 
-class GeoItem(NamedTuple):
+class GeoRecord(NamedTuple):
+    """Container for GeoItem with id"""
+
     id: int
-    name: GeoName
+    item: GeoItem
 
 
-class Region(GeoName):
+class Region(GeoItem):
     order = 10
 
     @classmethod
-    def parse(cls, names: Iterable[Name]):
+    def parse(cls, *names: LangNames):
         region, *_ = names
         return cls(region)
 
 
-class Raion(GeoName):
+class Raion(GeoItem):
     order = 20
 
     @classmethod
-    def parse(cls, names: Iterable[Name]):
+    def parse(cls, *names: LangNames):
         *init, raion = names
-        parent = Region.parse(init)
+        parent = Region.parse(*init)
         return cls(raion, parent)
 
 
-class City(GeoName):
+class City(GeoItem):
     order = 30
 
     @classmethod
-    def parse(cls, names: Iterable[Name]):
+    def parse(cls, *names: LangNames):
         *init, city = names
 
         if len(init) == 1:  # region.city
-            parent = Region.parse(init)
+            parent = Region.parse(*init)
         elif len(init) == 2:  # region.raion.city (town)
-            parent = Raion.parse(init)
+            parent = Raion.parse(*init)
         else:
             raise ValueError(f"Problem with City: {names}")
 
         return cls(city, parent)
 
 
-class District(GeoName):
+class District(GeoItem):
     order = 40
 
     @classmethod
-    def parse(cls, names: Iterable[Name]):
+    def parse(cls, *names: LangNames):
         *init, district = names
-        parent = City.parse(init)
+        parent = City.parse(*init)
         return cls(district, parent)
 
 
-class MicroDistrict(GeoName):
+class MicroDistrict(GeoItem):
     order = 50
 
     @classmethod
-    def parse(cls, names: Iterable[Name]):
+    def parse(cls, *names: LangNames):
         *init, microdistrict = names
-        parent = City.parse(init)
+        parent = City.parse(*init)
         return cls(microdistrict, parent)
 
 
-class Street(GeoName):
+class Street(GeoItem):
     order = 60
 
     @classmethod
-    def parse(cls, names: Iterable[Name]):
+    def parse(cls, *names: LangNames):
         *init, street = names
 
-        if len(init) == 2 or init[1].endswith(RAIONKEY):
-            parent = City.parse(init)
+        # second item of init
+        # its first language name
+        # its regular name
+        # it's probably raion
+        maybe_raion = init[1][0].name.endswith(RAIONKEY)
+
+        if len(init) == 2 or maybe_raion:
+            parent = City.parse(*init)
         else:
-            parent = District.parse(init)
+            parent = District.parse(*init)
 
         return cls(street, parent)
 
 
-class Address(GeoName):
+class Address(GeoItem):
     order = 70
 
     @classmethod
-    def parse(cls, names: Iterable[Name]):
+    def parse(cls, *names: LangNames):
         *init, address = names
-        parent = Street.parse(init)
+        parent = Street.parse(*init)
         return cls(address, parent)
 
 
 # * py3.7 keeps dict insertion order, but use OrderedDict+order TO:
-# * secure against order of GeoName declarations
+# * secure against order of GeoItem declarations
 # * secure against older python versions
 # * allow specific ordering
 TYPES = OrderedDict(sorted(GeoMeta._registry.items(), key=lambda p: p[1].order))

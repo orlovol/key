@@ -21,9 +21,9 @@ def read_items(csv):
         geo_id, geo_type, *names = row
         try:
             cls = geo.TYPES[geo_type]
-            item = geo.GeoItem(int(geo_id), cls.from_text(names))
+            item = geo.GeoRecord(int(geo_id), cls.from_texts(*names))
             yield item
-        except Exception as e:  # unsupported GeoItem, default to simple Row
+        except Exception as e:  # unsupported GeoRecord, default to simple Row
             print(e)
 
 
@@ -73,33 +73,52 @@ class Engine:
         raise ValueError(f"Can't resolve parent from {level_ids}: {paths}")
 
     @utils.profile
-    def index(self, items: Iterable[geo.GeoItem]) -> None:
+    def index(self, items: Iterable[geo.GeoRecord]) -> None:
         """Add collection of geo items to the trie"""
         for item in tqdm(items):  # * progressbar eats memory, but helps a lot
             self.add(item)
 
-    def add(self, item: geo.GeoItem):
-        self._trie.add(item)
+
+    def add_item(self, item: geo.GeoItem) -> geo.GeoRecord:
+        """Convert GeoItem to GeoRecord by creating id and save it"""
+        self._fixup_counter -= 1
+        record = geo.GeoRecord(id=self._fixup_counter, item=item)
+        self.add(record)
+        return record
+
+    def add(self, record: geo.GeoRecord):
+        """Add GeoRecord to trie and index"""
+        self._trie.add(record)
 
         # * Add to flat item index
-        self._index[item.id] = item.name
+        self._index[record.id] = record.item
 
-        # * item has parents - GeoNames
-        # * check if we have them in index as GeoItems
-        parent = item.name.parent
+        # * item has parents - GeoItems
+        # * check if we have them in index as GeoRecords
+        parent = record.item.parent
         while parent:
-            res = self._trie.lookup(parent.name.name, exact=True)  # one lang for now
-            if not res:
-                # Parent is not in index, add it
-                self._fixup_counter -= 1
-                parent_item = geo.GeoItem(id=self._fixup_counter, name=parent)
-                self.add(parent_item)
+            if isinstance(parent, geo.GeoItem):
+                # already swapped, go to next
+                parent = parent.parent
+                continue
 
-            if len(res) > 1:  # ambiguous match, detect correct parent
+            # * lookup by main lang
+            ids = self._trie.lookup(parent.name, exact=True)
+            if len(ids) == 0:
+                # Parent is not in index, add it
+                parent_item = self.add_record(parent)
+
+            elif len(ids) > 1:  # ambiguous match, detect correct parent
                 print()
-                print(parent, item.name)
-                pprint.pprint({i: self._index.get(i) for i in res})
+                print(parent, record.name)
+                pprint.pprint({i: self._index.get(i) for i in ids})
                 pass
+
+            else:
+                parent_id = ids.pop()
+                parent_item = self._index[parent_id]
+
+            # * swap geoitem parent with georecord
 
             parent = parent.parent
 

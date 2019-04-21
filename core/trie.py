@@ -6,13 +6,12 @@ Keys should be unique, values - any alphanumeric sequences
 """
 
 
-from typing import Iterator, Iterable, Set
+from collections import defaultdict
 from functools import partial
 from itertools import chain, combinations
-from collections import defaultdict
+from typing import Iterable, Iterator, Set
 
-from . import utils, geo
-
+from . import geo, utils
 
 ITEMSKEY = "_items"
 SUFFIXKEY = "_suffix"
@@ -164,15 +163,15 @@ class Trie:
             if id_ not in items:
                 items.append(id_)
 
-    def add(self, item: geo.GeoItem):
+    def add(self, record: geo.GeoRecord):
         """Add geo names to trie in multiple languages
         Add whole word, and all its suffixes
         """
-        for name in item.name:  # Name objects
+        for name in record.item:  # Name objects
             # Name is iterable namedtuple: name, old_name
             for i, suffix in enumerate(chain.from_iterable(map(suffixes, name))):
                 key = SUFFIXKEY if i else ITEMSKEY
-                self._add_word(item.id, suffix, key)
+                self._add_word(record.id, suffix, key)
 
         self._indexed_items += 1
         return True
