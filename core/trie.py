@@ -59,11 +59,11 @@ def _analyze(node: dict, depth=0, info=defaultdict(int)):
     info["depth"] = max(info["depth"], depth)
     for key in node.keys():
         if key == ITEMSKEY:
-            info["item_nodes"] += 1
-            info["item_count"] += len(node[key])
+            info["georecord_containers"] += 1
+            info["georecord_items"] += len(node[key])
         elif key == SUFFIXKEY:
-            info["suffix_nodes"] += 1
-            info["suffix_count"] += len(node[key])
+            info["suffix_containers"] += 1
+            info["suffix_items"] += len(node[key])
         else:
             info["prefix_nodes"] += 1
             _analyze(node[key], depth + 1, info)
@@ -72,16 +72,32 @@ def _analyze(node: dict, depth=0, info=defaultdict(int)):
 
 def analyze(node: dict, sizes=False):
     """Gather tree info - key-nodes & item ids, ratio, sizes"""
+    import math
+
     info = _analyze(node, 0)
     if info["depth"]:
-        info["item_mean"] = round(info["item_count"] / info["item_nodes"], 2)
-        info["node_type_ratio"] = round(info["item_nodes"] / info["prefix_nodes"], 2)
+        info["branching"] = round(math.log(info["prefix_nodes"], info["depth"]), 2)
+
+        info["georecord_density"] = round(info["georecord_items"] / info["georecord_containers"], 2)
+        info["suffix_density"] = round(info["suffix_items"] / info["suffix_containers"], 2)
+
+        info["ratio_geo_pfx"] = round(info["georecord_containers"] / info["prefix_nodes"], 2)
+        info["ratio_sfx_pfx"] = round(info["suffix_containers"] / info["prefix_nodes"], 2)
+
+        info["ratio_sfx_geo_containers"] = round(
+            info["suffix_containers"] / info["georecord_containers"], 2
+        )
+        info["ratio_sfx_geo_items"] = round(info["suffix_items"] / info["georecord_items"], 2)
+
+        info["itemkeys_containers"] = info["suffix_containers"] + info["georecord_containers"]
+        info["itemkeys_items"] = info["suffix_items"] + info["georecord_items"]
+        info["itemkeys_density"] = round(info["itemkeys_items"] / info["itemkeys_containers"], 2)
 
         if sizes:  # * note,`utils.total_size` eats memory
             info["size_trie"] = utils.total_size(node)
-            info["size_index"] = utils.total_size(list(_collect(node, exact=False)))
+            info["size_itemkeys"] = utils.total_size(list(_collect(node, exact=False)))
             # ! same as above, without tree traversal, but with magic constant
-            info["size_index2"] = utils.sizeof_fmt(10 * info["item_count"])
+            info["size_itemkeys2"] = utils.sizeof_fmt(10 * (info["itemkeys_items"]))
 
     return dict(info)
 
