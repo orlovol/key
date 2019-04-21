@@ -71,14 +71,15 @@ def _analyze(node: dict, depth=0, info=defaultdict(int)):
 def analyze(node: dict, sizes=False):
     """Gather tree info - key-nodes & item ids, ratio, sizes"""
     info = _analyze(node, 0)
-    info["item_mean"] = round(info["item_count"] / info["item_nodes"], 2)
-    info["node_type_ratio"] = round(info["item_nodes"] / info["prefix_nodes"], 2)
+    if info['depth']:
+        info["item_mean"] = round(info["item_count"] / info["item_nodes"], 2)
+        info["node_type_ratio"] = round(info["item_nodes"] / info["prefix_nodes"], 2)
 
-    if sizes:  # * note,`utils.total_size` eats memory
-        info["size_trie"] = utils.total_size(node)
-        info["size_index"] = utils.total_size(list(_collect(node)))
-        # ! same as above, without tree traversal, but with magic constant
-        info["size_index2"] = utils.sizeof_fmt(10 * info["item_count"])
+        if sizes:  # * note,`utils.total_size` eats memory
+            info["size_trie"] = utils.total_size(node)
+            info["size_index"] = utils.total_size(list(_collect(node)))
+            # ! same as above, without tree traversal, but with magic constant
+            info["size_index2"] = utils.sizeof_fmt(10 * info["item_count"])
 
     return dict(info)
 
@@ -161,13 +162,13 @@ class Trie:
                 items.append(id_)
 
     def add(self, item: geo.GeoItem):
-        """Add geo item names to trie
+        """Add geo names to trie in multiple languages
         Add whole word, and all its suffixes
         """
-        for name in (item.name, item.name_uk):  # Name
+        for name in item.name:  # Name objects
             # Name is iterable namedtuple: name, old_name
             for suffix in chain.from_iterable(map(suffixes, name)):
-                self._add_word(item.geo_id, suffix)
+                self._add_word(item.id, suffix)
 
         self._indexed_items += 1
         return True

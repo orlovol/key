@@ -20,9 +20,9 @@ def read_items(csv):
     for row in read.read_csv(csv):
         geo_id, geo_type, *names = row
         try:
-            geocls = geo.TYPES[geo_type]
-            geo_obj = geocls(int(geo_id), *names)
-            yield geo_obj
+            cls = geo.TYPES[geo_type]
+            item = geo.GeoItem(int(geo_id), cls.from_text(names))
+            yield item
         except Exception as e:  # unsupported GeoItem, default to simple Row
             print(e)
 
@@ -39,17 +39,10 @@ class Engine:
             items = read_items(file)
             self.index(items)
 
-    @utils.profile
-    def index(self, items: Iterable[geo.GeoItem]) -> None:
-        """Add collection of geo items to the trie"""
-        for item in tqdm(items):  # * progressbar eats memory, but helps a lot
-            self.add(item)
-
     def get_parents(self, pathdict: Dict[str, Set[int]]) -> Dict[int, Set[int]]:
         "Return dict of parent ids, grouped by order/geotype level"
         return {
-            geo.ORDERS[geotype]: self._trie.lookup(string)
-            for geotype, string in pathdict.items()
+            geo.ORDERS[geotype]: self._trie.lookup(string) for geotype, string in pathdict.items()
         }
 
     def resolve_parent(self, level_ids: Dict[int, Set[int]]) -> int:
@@ -78,12 +71,17 @@ class Engine:
         # missing some middle path element
         raise ValueError(f"Can't resolve parent from {level_ids}: {paths}")
 
+    @utils.profile
+    def index(self, items: Iterable[geo.GeoItem]) -> None:
+        """Add collection of geo items to the trie"""
+        for item in tqdm(items):  # * progressbar eats memory, but helps a lot
+            self.add(item)
 
     def add(self, item: geo.GeoItem):
         self._trie.add(item)
 
         # * Add to flat item index
-        self._index[item.geo_id] = item
+        self._index[item.id] = item.name
 
         # get level-ids dictionary
         level_ids = {}  # ? we should have same path for languages?
@@ -109,6 +107,8 @@ class Engine:
 
         # * Add to child-parent id index
         self._parents[item.geo_id] = parent
+
+    # HELPERS
 
     def info(self):
         info = "\n".join(
