@@ -36,40 +36,7 @@ class Engine:
         self.lookup = self._trie.lookup
 
         if file:
-            items = read_items(file)
-            self.index(items)
-
-    def get_parents(self, pathdict: Dict[str, Set[int]]) -> Dict[int, Set[int]]:
-        "Return dict of parent ids, grouped by order/geotype level"
-        return {
-            geo.ORDERS[geotype]: self._trie.lookup(string) for geotype, string in pathdict.items()
-        }
-
-    def resolve_parent(self, level_ids: Dict[int, Set[int]]) -> int:
-        """Split into lowest and highest parent ids.
-        Lookup parents from bottom until we meet the top.
-        Return the lowest parent that has the same n-parent as the top id.
-        """
-        # order geotypes/keys from bottom to top (increasing area)
-        *low_levels, top_level = sorted(level_ids, reverse=True)
-        top_ids = level_ids[top_level]
-
-        if len(top_ids) > 1:
-            raise ValueError(f"Top level has more than one value {top_level}")
-
-        # save lowest level ids, to track their path upward
-        paths = {i: i for i in level_ids[low_levels[0]]}
-
-        # find parent ids from lower level ids, moving upwards
-        for level in low_levels:
-            for k, v in paths.items():
-                parent = self._parents.get(v)
-                if parent in top_ids:
-                    return k
-                paths[k] = parent
-
-        # missing some middle path element
-        raise ValueError(f"Can't resolve parent from {level_ids}: {paths}")
+            self.index(read_items(file))
 
     @utils.profile
     def index(self, items: Iterable[geo.GeoRecord]) -> None:
@@ -86,7 +53,7 @@ class Engine:
 
     def search(self, name: str, ids: Set[int]) -> int:
         """Find id by exact name in subset of ids"""
-        records = list(map(self._index.get, ids))
+        records = [self._index.get(i) for i in ids]
         for record in records:
             if record.item.name.name == name:
                 return record
@@ -143,7 +110,7 @@ class Engine:
 
     def filter(self, results: Set[int], maxcount=3) -> Dict:
         """Filter & format search results"""
-        res : Dict[str, Any] = {}
+        res: Dict[str, Any] = {}
         count = total = len(results)
         for r in results:
             obj = self._index[r]
@@ -179,6 +146,6 @@ class Engine:
                         break
 
             # * sorted alphabeticatlly =(
-            pprint.pprint(self.filter(res, 1000))
+            pprint.pprint(self.filter(res, 3))
 
         print("Bye!")
