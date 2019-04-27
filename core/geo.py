@@ -3,11 +3,9 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import ClassVar, Dict, Iterable, Iterator, NamedTuple, Optional, Tuple
 
-WORD_SEP = ", "
 RAIONKEY = "район"  # bilingual unique key for raion/district
-
-OLD_NAME_RE = fr"\s*\(\s*(?P<old_name>.*)\s*\)"
-OLD_NAME = re.compile(OLD_NAME_RE)
+WORD_SEP = re.compile(r", (?![^(]*\))")
+OLD_NAME = re.compile(r"\s*\(\s*(?P<old_name>.*)\s*\)")
 
 
 class Name(NamedTuple):
@@ -23,7 +21,7 @@ class Name(NamedTuple):
         return f'"{self}"'
 
 
-def words_to_names(lang_words: Tuple[str, ...]) -> Iterator[Name]:
+def words_to_names(lang_words: Iterable[str]) -> Iterator[Name]:
     """Convert tuples of name strings into Name items and wrap into LangNames"""
     old_name = None
 
@@ -42,7 +40,7 @@ def words_to_names(lang_words: Tuple[str, ...]) -> Iterator[Name]:
 LangNames = Tuple[Name, ...]
 
 
-def to_names(words: Tuple[str, ...]) -> LangNames:
+def to_names(words: Iterable[str]) -> LangNames:
     return tuple(words_to_names(words))
 
 
@@ -81,7 +79,7 @@ class GeoItem(metaclass=GeoMeta):
     @classmethod
     def from_texts(cls, *texts: str):
         # tuples of words in all languages for each level
-        level_words: Iterable[Tuple[str, ...]] = zip(*(word.split(WORD_SEP) for word in texts))
+        level_words: Iterable[Tuple[str, ...]] = zip(*(WORD_SEP.split(word) for word in texts))
         level_names: Iterable[LangNames] = map(to_names, level_words)
         return cls.parse(*level_names)
 

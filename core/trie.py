@@ -16,9 +16,8 @@ from . import geo, utils
 ITEMSKEY = "_items"
 SUFFIXKEY = "_suffix"
 KEYS = {ITEMSKEY, SUFFIXKEY}
-
-# ? bad idea, but ё is so rarely used
-REPLACEMENTS = str.maketrans("-ё", " е", "'’")  # from, to, remove
+# replace shifty characters for trie only
+REPLACEMENTS = str.maketrans("-ёґ", " ег", "\"'’,.")  # from, to, remove
 
 
 def preprocess_words(word: str) -> List[str]:
