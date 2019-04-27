@@ -36,9 +36,12 @@ def collect_data(index: dict) -> Iterator[List[str]]:
     yield ["geo_id", "geo_type", "name", "name_uk"]
     max_id = max(index)
     # count up to nearest hundred
-    offset_id = (max_id // 100 + 1) * 100
-    for record in index.values():
-        geo_id = record.id if record.id > 0 else offset_id - record.id
+    offset = (max_id // 100 + 1) * 100
+    offset_id = lambda id_: id_ if id_ > 0 else offset - id_
+
+    for key in sorted(index, key=offset_id):
+        record = index[key]
+        geo_id = offset_id(record.id)
         geo_item = record.item
         geo_type = geo_item._type
         yield [geo_id, geo_type, *collect_names(geo_item)]
