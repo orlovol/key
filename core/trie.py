@@ -16,8 +16,9 @@ from . import geo, utils
 ITEMSKEY = "_items"
 SUFFIXKEY = "_suffix"
 KEYS = {ITEMSKEY, SUFFIXKEY}
-# replace shifty characters for trie only
-SUB_MAP = str.maketrans("-ёґ", " ег", r'''{}()[]"'’,._<>:;!@#$%^&*+=''')  # from, to, remove
+
+# replace shifty characters for trie add/lookup only, not index
+SUB_MAP = str.maketrans("-ёґ", " ег", r"""{}()[]"'’,._<>:;!@#$%^&*+=""")  # from, to, remove
 LATCYR_MAP = str.maketrans("etiopahkxcbm", "етіоранкхсвм")
 LATIN = re.compile("[a-z]")
 
@@ -29,8 +30,16 @@ def change_latin(word: str) -> str:
 
 
 def preprocess_words(word: str) -> List[str]:
-    """Simplify word as much as possible"""
+    """Simplify word as much as possible and split by whitespace"""
     return [change_latin(w) for w in word.lower().translate(SUB_MAP).split()] if word else []
+
+
+def suffixes(word: str) -> Iterator[str]:
+    """Return all suffixes of the word"""
+    if not word:
+        return
+    for i, _ in enumerate(word):
+        yield word[i:]
 
 
 def _collect(node: dict, exact: bool) -> Iterable[int]:
@@ -77,21 +86,25 @@ def analyze(node: dict, sizes=False):
 
     info = _analyze(node, 0)
     if info["depth"]:
-        info["branching"] = round(math.log(info["prefix_nodes"], info["depth"]), 2)
+        pfx_nodes = info["prefix_nodes"]
+        geo_cont = info["georecord_containers"]
+        geo_items = info["georecord_items"]
+        sfx_cont = info["suffix_containers"]
+        sfx_items = info["suffix_items"]
 
-        info["georecord_density"] = round(info["georecord_items"] / info["georecord_containers"], 2)
-        info["suffix_density"] = round(info["suffix_items"] / info["suffix_containers"], 2)
+        info["branching"] = round(math.log(pfx_nodes, info["depth"]), 2)
 
-        info["ratio_geo_pfx"] = round(info["georecord_containers"] / info["prefix_nodes"], 2)
-        info["ratio_sfx_pfx"] = round(info["suffix_containers"] / info["prefix_nodes"], 2)
+        info["georecord_density"] = round(geo_items / geo_cont, 2)
+        info["suffix_density"] = round(sfx_items / sfx_cont, 2)
 
-        info["ratio_sfx_geo_containers"] = round(
-            info["suffix_containers"] / info["georecord_containers"], 2
-        )
-        info["ratio_sfx_geo_items"] = round(info["suffix_items"] / info["georecord_items"], 2)
+        info["ratio_geo_pfx"] = round(geo_cont / pfx_nodes, 2)
+        info["ratio_sfx_pfx"] = round(sfx_cont / pfx_nodes, 2)
 
-        info["itemkeys_containers"] = info["suffix_containers"] + info["georecord_containers"]
-        info["itemkeys_items"] = info["suffix_items"] + info["georecord_items"]
+        info["ratio_sfx_geo_containers"] = round(sfx_cont / geo_cont, 2)
+        info["ratio_sfx_geo_items"] = round(sfx_items / geo_items, 2)
+
+        info["itemkeys_containers"] = sfx_cont + geo_cont
+        info["itemkeys_items"] = sfx_items + geo_items
         info["itemkeys_density"] = round(info["itemkeys_items"] / info["itemkeys_containers"], 2)
 
         if sizes:  # * note,`utils.total_size` eats memory
@@ -131,14 +144,6 @@ def lookup(root: dict, query: str, exact: bool = False) -> Set[int]:
     return word_ids[0]
 
 
-def suffixes(word: str) -> Iterator[str]:
-    """Return all suffixes of the word"""
-    if not word:
-        return
-    for i, _ in enumerate(word):
-        yield word[i:]
-
-
 class Trie:
     def __init__(self):
         self.root = utils.rec_dd()
@@ -176,7 +181,7 @@ class Trie:
         if id_ not in items:
             items.append(id_)
 
-    def add(self, record: geo.GeoRecord):
+    def add(self, record: geo.GeoRecord) -> geo.GeoRecord:
         """Add geo names to trie in multiple languages
         Add whole word, and all its suffixes
         """
@@ -193,7 +198,7 @@ class Trie:
                         self._add_word(record.id, suffix, key)
 
         self._indexed_items += 1
-        return True
+        return record
 
 
 __all__ = ["Trie"]

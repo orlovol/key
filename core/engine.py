@@ -1,8 +1,7 @@
-import pprint
 from tqdm import tqdm
 from typing import Any, Iterable, Dict, Set, Iterator, List
 
-from . import read, geo, trie, utils
+from . import data, geo, trie, utils
 
 
 # latin to cyrillic keyboard layout map
@@ -15,32 +14,58 @@ keymap_uk = str.maketrans(
 KEYMAPS = (keymap_uk, keymap_ru)  # ? language preference can be specified somewhere
 
 
-def read_items(csv):
-    for row in read.read_csv(csv):
-        geo_id, geo_type, *names = row
-        cls = geo.TYPES[geo_type]
-        item = geo.GeoRecord(int(geo_id), cls.from_texts(*names))
-        yield item
+def _collect_names(geo_item: geo.GeoItem) -> Iterator[Iterator[str]]:
+    """Return lang_name tuples for each level, increasing area size"""
+    yield map(str, geo_item)
+    while geo_item.parent:
+        if isinstance(geo_item.parent, geo.GeoRecord):
+            geo_item = geo_item.parent.item
+        else:
+            geo_item = geo_item.parent
+        yield map(str, geo_item)
 
 
+def collect_names(geo_item: geo.GeoItem) -> Iterator[str]:
+    """Return full names for all languages, decreasing area size"""
+    langs = zip(*_collect_names(geo_item))
+    return (", ".join(lang[::-1]) for lang in langs)
 
-def same_parents(child: geo.GeoItem, possible_sibling: geo.GeoItem):
+
+def collect_data(index: dict) -> Iterator[List[str]]:
+    """Gather data rows for csv export"""
+    yield ["geo_id", "geo_type", "name", "name_uk"]
+    max_id = max(index)
+    # count up to nearest hundred
+    offset_id = (max_id // 100 + 1) * 100
+    for record in index.values():
+        geo_id = record.id if record.id > 0 else offset_id - record.id
+        geo_item = record.item
+        geo_type = geo_item._type
+        yield [geo_id, geo_type, *collect_names(geo_item)]
+
+
+def same_parents(child: geo.GeoItem, possible_sibling: geo.GeoItem) -> bool:
     """Check if two items have the same parent. Should have similar names"""
     expected = child.parent  # parent that we expect
     possible = possible_sibling.parent
     return expected == possible
 
 
+def read_items(csv: str) -> Iterator[geo.GeoRecord]:
+    """Read csv rows into GeoRecords"""
+    for row in data.read_csv(csv):
+        geo_id, geo_type, *names = row
+        cls = geo.GeoMeta.registry[geo_type]
+        item = geo.GeoRecord(int(geo_id), cls.from_texts(*names))
+        yield item
+
+
 class Engine:
     def __init__(self, file=None):
         self._trie = trie.Trie()
-
         # index of added singleton records, handy alias
         self._index = geo.GeoRecord.registry
-
-        self._parents = {}  # {child_id: one nearest parent_id}
         self._fixup_counter = 0
-
         self.lookup = self._trie.lookup
 
         if file:
@@ -52,18 +77,23 @@ class Engine:
         for item in tqdm(items):  # * progressbar eats memory, but helps a lot
             self.add(item)
 
-    def add_item(self, item: geo.GeoItem) -> geo.GeoRecord:
-        """Convert GeoItem to GeoRecord by creating id and save it"""
-        self._fixup_counter -= 1
-        record = geo.GeoRecord(id=self._fixup_counter, item=item)
-        self._trie.add(record)
-        return record
+    @utils.profile
+    def export(self, path):
+        """Save data from index into csv"""
+        data.write_csv(path, collect_data(self._index))
+        print(f"Exported to {path}")
 
     def search(self, name: str, ids: Set[int]) -> List[geo.GeoRecord]:
         """Find id by exact name in subset of ids"""
         records = [self._index.get(i) for i in ids]
         matches = [r for r in records if str(r.item.name) == name]
         return matches
+
+    def add_item(self, item: geo.GeoItem) -> geo.GeoRecord:
+        """Convert GeoItem to GeoRecord by creating id and save it"""
+        self._fixup_counter -= 1
+        record = geo.GeoRecord(id=self._fixup_counter, item=item)
+        return self._trie.add(record)
 
     def add(self, record: geo.GeoRecord):
         """Add GeoRecord to trie and index"""
@@ -132,7 +162,7 @@ class Engine:
         count = total = len(results)
         for r in results:
             obj = self._index[r]
-            items = res.setdefault(obj.item._name, [])
+            items = res.setdefault(obj.item._type, [])
             if len(items) < maxcount:
                 items.append(obj)
                 count -= 1
@@ -162,8 +192,5 @@ class Engine:
                     if res:
                         print(f"Did you mean _{tr}_?")
                         break
-
-            # * sorted alphabeticatlly =(
-            pprint.pprint(self.filter(res, 3))
-
+            print(self.filter(res, 3))
         print("Bye!")

@@ -4,6 +4,7 @@ import pathlib
 from . import utils, engine
 
 GEOFILE = pathlib.Path(__file__).parent / "data/geo.csv"
+ALLGEOFILE = pathlib.Path(__file__).parent / "data/geo_all.csv"
 
 
 @utils.profile
@@ -14,8 +15,10 @@ def main():
 
     engie = engine.Engine(file=GEOFILE)
     engie.info()
-
-    interactive and engie.interactive()
+    if interactive:
+        engie.interactive()
+    else:
+        engie.export(ALLGEOFILE)
 
 
 main()

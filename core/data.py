@@ -22,3 +22,12 @@ def read_csv(path):
         georeader = csv.reader(data, escapechar="\\")
         for row in map(row_maker, georeader):
             yield row
+
+
+def write_csv(path, data):
+    with open(path, "w", newline="") as csvfile:
+        writer = csv.writer(
+            csvfile, escapechar="\\", doublequote=False, quoting=csv.QUOTE_NONNUMERIC
+        )
+        for row in data:
+            writer.writerow(row)

@@ -1,5 +1,5 @@
 import re
-from collections import OrderedDict
+
 from dataclasses import dataclass
 from typing import ClassVar, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple
 
@@ -22,7 +22,11 @@ class Name(NamedTuple):
         return f'"{self}"'
 
 
-def words_to_names(lang_words: Iterable[str]) -> Iterator[Name]:
+# Multilingual Name collection
+LangNames = Tuple[Name, ...]
+
+
+def _words_to_names(lang_words: Iterable[str]) -> Iterator[Name]:
     """Convert tuples of name strings into Name items and wrap into LangNames"""
     old_name = None
 
@@ -37,33 +41,27 @@ def words_to_names(lang_words: Iterable[str]) -> Iterator[Name]:
         yield name
 
 
-# Multilingual Name collection
-LangNames = Tuple[Name, ...]
-
-
 def to_names(words: Iterable[str]) -> LangNames:
-    return tuple(words_to_names(words))
+    return tuple(_words_to_names(words))
 
 
 class GeoMeta(type):
-    _registry: Dict[str, "GeoItem"] = {}
+    registry: Dict[str, "GeoItem"] = {}
 
     def __new__(cls, name, bases, dct):
-        """Called for each GeoRecord class"""
+        """Called for each class with this metaclass"""
         geo = super().__new__(cls, name, bases, dct)
-        if bases:
-            geo._name = name.lower()
-            cls._registry[geo._name] = geo  # add geotype registry to meta
+        if bases:  # then it's GeoItem
+            geo._type = name.lower()
+            cls.registry[geo._type] = geo  # add geotype registry to meta
         return geo
 
 
 class GeoItem(metaclass=GeoMeta):
     """Simple class that contains name and type, without id"""
 
-    order = 0
-    _name = None
-
     __slots__ = ["name", "name_uk", "parent"]
+    _type = None
 
     def __init__(self, names: LangNames, parent: Optional["GeoItem"] = None):
         self.name, self.name_uk, *_ = names
@@ -103,6 +101,7 @@ class GeoItem(metaclass=GeoMeta):
 class GeoRecord:
     """Container for GeoItem with id"""
 
+    __slots__ = ["id", "item"]
     id: int
     item: GeoItem
     registry: ClassVar[Dict[int, "GeoRecord"]] = {}
@@ -110,15 +109,12 @@ class GeoRecord:
     def __new__(cls, id, item):
         try:
             obj = cls.registry[id]
-
         except KeyError:
             obj = object.__new__(cls)
             cls.registry[id] = obj
-
         else:
             if (obj.id == id) != (obj.item == item):
                 raise ValueError(f"Collision with existing {obj}: ({id}, {item})")
-
         return obj
 
     def __eq__(self, other):
@@ -128,8 +124,6 @@ class GeoRecord:
 
 
 class Region(GeoItem):
-    order = 10
-
     @classmethod
     def parse(cls, *names: LangNames):
         region, *_ = names
@@ -137,8 +131,6 @@ class Region(GeoItem):
 
 
 class Raion(GeoItem):
-    order = 20
-
     @classmethod
     def parse(cls, *names: LangNames):
         *init, raion = names
@@ -147,8 +139,6 @@ class Raion(GeoItem):
 
 
 class City(GeoItem):
-    order = 30
-
     @classmethod
     def parse(cls, *names: LangNames):
         *init, city = names
@@ -164,8 +154,6 @@ class City(GeoItem):
 
 
 class District(GeoItem):
-    order = 40
-
     @classmethod
     def parse(cls, *names: LangNames):
         *init, district = names
@@ -174,8 +162,6 @@ class District(GeoItem):
 
 
 class MicroDistrict(GeoItem):
-    order = 50
-
     @classmethod
     def parse(cls, *names: LangNames):
         *init, microdistrict = names
@@ -184,8 +170,6 @@ class MicroDistrict(GeoItem):
 
 
 class Street(GeoItem):
-    order = 60
-
     @classmethod
     def parse(cls, *names: LangNames):
         *init, street = names
@@ -205,18 +189,8 @@ class Street(GeoItem):
 
 
 class Address(GeoItem):
-    order = 70
-
     @classmethod
     def parse(cls, *names: LangNames):
         *init, address = names
         parent = Street.parse(*init)
         return cls(address, parent)
-
-
-# * py3.7 keeps dict insertion order, but use OrderedDict+order TO:
-# * secure against order of GeoItem declarations
-# * secure against older python versions
-# * allow specific ordering
-TYPES = OrderedDict(sorted(GeoMeta._registry.items(), key=lambda p: p[1].order))
-ORDERS = {v._name: v.order for v in GeoMeta._registry.values()}
