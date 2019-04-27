@@ -28,6 +28,8 @@ def preprocess(word: str) -> str:
 
 def preprocess_words(word: str) -> Iterable[str]:
     """Simplify word as much as possible"""
+    if not word:
+        return []
     word = word.replace("-", " ")
     return (preprocess(w) for w in word.split())
 
@@ -120,12 +122,12 @@ def lookup(root: dict, query: str, exact: bool = False) -> Set[int]:
             word_ids.append(collect(node, exact))
 
     id_sets = len(word_ids)
+    if id_sets == 2 or exact:
+        return set.intersection(*word_ids)
+
     if id_sets > 2:
         # calculate union of paired intersections
         return set.union(*(set.intersection(*pair) for pair in combinations(word_ids, 2)))
-
-    if id_sets == 2:
-        return set.intersection(*word_ids)
 
     return word_ids[0]
 
@@ -168,26 +170,31 @@ class Trie:
         Append id_ to `items` list in the final node.
         Word may be splitted into subwords, which are added separately
         """
-        for subword in preprocess_words(word):
-            node = self.root
-            for c in subword:
-                self._alphabet.add(c)
-                node = node[c]
-            # we can't have two different words with same tree-path
-            # but they can have multiple ids, so let's keep them in a list
-            items = node.setdefault(key, list())
-            if id_ not in items:
-                items.append(id_)
+        node = self.root
+        for c in word:
+            self._alphabet.add(c)
+            node = node[c]
+        # we can't have two different words with same tree-path
+        # but they can have multiple ids, so let's keep them in a list
+        items = node.setdefault(key, list())
+        if id_ not in items:
+            items.append(id_)
 
     def add(self, record: geo.GeoRecord):
         """Add geo names to trie in multiple languages
         Add whole word, and all its suffixes
         """
-        for name in record.item:  # Name objects
+        # ! TODO: chain
+        # Name objects for different languages
+        for lang_name in record.item:
             # Name is iterable namedtuple: name, old_name
-            for i, suffix in enumerate(chain.from_iterable(map(suffixes, name))):
-                key = SUFFIXKEY if i else ITEMSKEY
-                self._add_word(record.id, suffix, key)
+            for name in lang_name:
+                # split into words
+                for word in preprocess_words(name):
+                    # retrieve suffixes
+                    for i, suffix in enumerate(suffixes(word)):
+                        key = SUFFIXKEY if i else ITEMSKEY
+                        self._add_word(record.id, suffix, key)
 
         self._indexed_items += 1
         return True

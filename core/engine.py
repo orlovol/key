@@ -1,5 +1,4 @@
 import pprint
-from itertools import chain
 from tqdm import tqdm
 from typing import Iterable, Dict, Set
 
@@ -20,8 +19,6 @@ def read_items(csv):
     for row in read.read_csv(csv):
         geo_id, geo_type, *names = row
         cls = geo.TYPES[geo_type]
-        if cls == geo.Street:  # ! ABORT
-            return
         item = geo.GeoRecord(int(geo_id), cls.from_texts(*names))
         yield item
 
@@ -87,6 +84,14 @@ class Engine:
         self._trie.add(record)
         return record
 
+    def search(self, name: str, ids: Set[int]) -> int:
+        """Find id by exact name in subset of ids"""
+        records = list(map(self._index.get, ids))
+        for record in records:
+            if record.item.name.name == name:
+                return record
+        raise KeyError(f'Name "{name}" was not found in the records: {records}')
+
     def add(self, record: geo.GeoRecord):
         """Add GeoRecord to trie and index"""
         self._trie.add(record)
@@ -104,49 +109,29 @@ class Engine:
                 continue
 
             # * lookup by main lang, regular name
-            ids = self._trie.lookup(parent.name.name, exact=True)
+            query = parent.name.name
+            ids = self._trie.lookup(query, exact=True)
             if len(ids) == 0:
                 # Parent is not in index, add it
                 parent_record = self.add_item(parent)
 
-            elif len(ids) > 1:  # ambiguous match, detect correct parent
-                print()
-                print(parent, record.name)
-                pprint.pprint({i: self._index.get(i) for i in ids})
-                pass
+            elif len(ids) > 1:
+                # Ambiguous match, detect correct parent.
+                # Most often word "superset" is matched, because names are split
+                # into many words: "aaa-bbb": "aaa", "bbb"
+                # Search by full name from index
+                try:
+                    parent_record = self.search(query, ids)
+                except KeyError:
+                    # multiple parents and yet we don't have the one we need
+                    # let's add it, whatever it is
+                    parent_record = self.add_item(parent)
 
             else:
                 parent_record = self._index[ids.pop()]
 
             # * swap geoitem parent with georecord, make it next child
             item.parent = parent = parent_record
-
-        """_COMMENTED_
-        # get level-ids dictionary
-        level_ids = {}  # ? we should have same path for languages?
-        for lang_path in (item.path, item.path_uk):
-            ids = self.get_parents(lang_path)
-            for k, v in ids.items():
-                id_set = level_ids.setdefault(k, set())
-                id_set.update(v)
-
-        parent_ids = set(chain.from_iterable(level_ids.values()))
-        if len(parent_ids) == 1:
-            parent = parent_ids.pop()
-
-        elif level_ids:
-            try:
-                parent = self.resolve_parent(level_ids)
-            except ValueError as e:
-                print(f"Unresolved parent: {item.path} {item.name}\n{e}")
-                return  # data is batman
-
-        else:  # no parents - no place in index
-            return
-
-        # * Add to child-parent id index
-        self._parents[item.id] = parent
-        """
 
     # HELPERS
 
@@ -156,14 +141,14 @@ class Engine:
         )
         print(f"\n{info}\n")
 
-    def filter(self, results: Set[int]) -> Dict:
+    def filter(self, results: Set[int], maxcount=3) -> Dict:
         """Filter & format search results"""
         res = {}
         count = total = len(results)
         for r in results:
             obj = self._index[r]
-            items = res.setdefault(obj._name, [])
-            if len(items) < 3:
+            items = res.setdefault(obj.item._name, [])
+            if len(items) < maxcount:
                 items.append(obj)
                 count -= 1
 
@@ -194,6 +179,6 @@ class Engine:
                         break
 
             # * sorted alphabeticatlly =(
-            pprint.pprint(self.filter(res))
+            pprint.pprint(self.filter(res, 1000))
 
         print("Bye!")
