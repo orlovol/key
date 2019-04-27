@@ -5,7 +5,7 @@ from typing import ClassVar, Dict, Iterable, Iterator, List, NamedTuple, Optiona
 
 RAIONKEY = "район"  # bilingual unique key for raion/district
 WORD_SEP = re.compile(r", (?![^(]*\))")
-OLD_NAME = re.compile(r"\s*\(\s*(?P<old_name>.*)\s*\)")
+OLD_NAME = re.compile(r"\s*\(\s*(?P<old_name>.*?)\s*\)\s*")
 SPACES = re.compile(" {2,}")
 
 
@@ -33,12 +33,12 @@ def _words_to_names(lang_words: Iterable[str]) -> Iterator[Name]:
     def repl(match):
         nonlocal old_name
         old_name = match.group("old_name")
-        return ""
+        return " "
 
     for lang in lang_words:
         old_name = None
-        name = Name(name=OLD_NAME.sub(repl, lang, 1), old_name=old_name)
-        yield name
+        name = OLD_NAME.sub(repl, lang, 1).strip()
+        yield Name(name, old_name)
 
 
 def to_names(words: Iterable[str]) -> LangNames:
