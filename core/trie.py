@@ -5,7 +5,7 @@ Expects values in form of (int key, string value)
 Keys should be unique, values - any alphanumeric sequences
 """
 
-
+import re
 from collections import defaultdict
 from functools import partial
 from itertools import chain, combinations
@@ -17,12 +17,20 @@ ITEMSKEY = "_items"
 SUFFIXKEY = "_suffix"
 KEYS = {ITEMSKEY, SUFFIXKEY}
 # replace shifty characters for trie only
-REPLACEMENTS = str.maketrans("-ёґ", " ег", "\"'’,.")  # from, to, remove
+SUB_MAP = str.maketrans("-ёґ", " ег", "\"'’,.")  # from, to, remove
+LATCYR_MAP = str.maketrans("etiopahkxcbm", "етіоранкхсвм")
+LATIN = re.compile("[a-z]")
+
+
+def change_latin(word: str) -> str:
+    if len(LATIN.findall(word)) < len(word):
+        word = word.translate(LATCYR_MAP)
+    return word
 
 
 def preprocess_words(word: str) -> List[str]:
     """Simplify word as much as possible"""
-    return word.lower().translate(REPLACEMENTS).split() if word else []
+    return [change_latin(w) for w in word.lower().translate(SUB_MAP).split()] if word else []
 
 
 def _collect(node: dict, exact: bool) -> Iterable[int]:
