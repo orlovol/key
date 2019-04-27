@@ -1,6 +1,6 @@
 import pprint
 from tqdm import tqdm
-from typing import Any, Iterable, Dict, Set
+from typing import Any, Iterable, Dict, Set, Iterator, List
 
 from . import read, geo, trie, utils
 
@@ -21,6 +21,14 @@ def read_items(csv):
         cls = geo.TYPES[geo_type]
         item = geo.GeoRecord(int(geo_id), cls.from_texts(*names))
         yield item
+
+
+
+def same_parents(child: geo.GeoItem, possible_sibling: geo.GeoItem):
+    """Check if two items have the same parent. Should have similar names"""
+    expected = child.parent  # parent that we expect
+    possible = possible_sibling.parent
+    return expected == possible
 
 
 class Engine:
@@ -51,13 +59,11 @@ class Engine:
         self._trie.add(record)
         return record
 
-    def search(self, name: str, ids: Set[int]) -> int:
+    def search(self, name: str, ids: Set[int]) -> List[geo.GeoRecord]:
         """Find id by exact name in subset of ids"""
         records = [self._index.get(i) for i in ids]
-        for record in records:
-            if record.item.name.name == name:
-                return record
-        raise KeyError(f'Name "{name}" was not found in the records: {records}')
+        matches = [r for r in records if str(r.item.name) == name]
+        return matches
 
     def add(self, record: geo.GeoRecord):
         """Add GeoRecord to trie and index"""
@@ -75,27 +81,39 @@ class Engine:
                 parent = item.parent
                 continue
 
-            # * lookup by main lang, regular name
-            query = parent.name.name
+            # * lookup by main lang, full name
+            query = str(parent.name)
             ids = self._trie.lookup(query, exact=True)
-            if len(ids) == 0:
+            if ids:
+                if len(ids) == 1:
+                    # the one parent that we can't choose
+                    parent_record = self._index[ids.pop()]
+                    if not same_parents(parent, parent_record.item):
+                        # but it's grandparent is not ours, let's add correct parent
+                        parent_record = self.add_item(parent)
+
+                elif len(ids) > 1:
+                    # Ambiguous match, detect correct parent.
+                    # Most often word "superset" is matched, because
+                    # names are split into many words: "aaa-bbb": "aaa", "bbb"
+                    # Search by full name in these ids
+                    results = self.search(query, ids)
+
+                    # We may find multiple items with same name, but they may
+                    # have different parents. Let's check them
+                    checked = [r for r in results if same_parents(parent, r.item)]
+                    if checked:
+                        if len(checked) > 1:
+                            # same parent, same grandparent, bad
+                            raise ValueError(f"Duplicate child-parent paths: {checked}")
+                        parent_record = checked[0]
+                    else:
+                        # no parent found, perhaps the archives are incomplete
+                        # let's add the expected parent as is
+                        parent_record = self.add_item(parent)
+            else:
                 # Parent is not in index, add it
                 parent_record = self.add_item(parent)
-
-            elif len(ids) > 1:
-                # Ambiguous match, detect correct parent.
-                # Most often word "superset" is matched, because names are split
-                # into many words: "aaa-bbb": "aaa", "bbb"
-                # Search by full name from index
-                try:
-                    parent_record = self.search(query, ids)
-                except KeyError:
-                    # multiple parents and yet we don't have the one we need
-                    # let's add it, whatever it is
-                    parent_record = self.add_item(parent)
-
-            else:
-                parent_record = self._index[ids.pop()]
 
             # * swap geoitem parent with georecord, make it next child
             item.parent = parent = parent_record

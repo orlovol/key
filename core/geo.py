@@ -16,7 +16,7 @@ class Name(NamedTuple):
     old_name: Optional[str]
 
     def __str__(self):
-        return f"{self.name} ~{self.old_name}" if self.old_name else self.name
+        return f"{self.name} ({self.old_name})" if self.old_name else self.name
 
     def __repr__(self):
         return f'"{self}"'
@@ -70,9 +70,16 @@ class GeoItem(metaclass=GeoMeta):
         self.parent: Optional["GeoItem"] = parent
 
     def __iter__(self):
-        """Iterate over Names"""
+        """Iterate over languages/Names"""
         yield self.name
         yield self.name_uk
+
+    def __eq__(self, other):
+        if isinstance(other, GeoRecord):
+            other = other.item
+        if isinstance(other, GeoItem):
+            return list(self) == list(other) and self.parent == other.parent
+        return NotImplemented
 
     def __repr__(self):
         return f'{self.__class__.__name__}("{self.name}")'
@@ -113,6 +120,11 @@ class GeoRecord:
                 raise ValueError(f"Collision with existing {obj}: ({id}, {item})")
 
         return obj
+
+    def __eq__(self, other):
+        if isinstance(other, GeoRecord):
+            return (self.id, self.item) == (other.id, other.item)
+        return NotImplemented
 
 
 class Region(GeoItem):
