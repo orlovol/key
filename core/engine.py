@@ -1,6 +1,6 @@
 import pprint
 from tqdm import tqdm
-from typing import Iterable, Dict, Set
+from typing import Any, Iterable, Dict, Set
 
 from . import read, geo, trie, utils
 
@@ -143,7 +143,7 @@ class Engine:
 
     def filter(self, results: Set[int], maxcount=3) -> Dict:
         """Filter & format search results"""
-        res = {}
+        res : Dict[str, Any] = {}
         count = total = len(results)
         for r in results:
             obj = self._index[r]

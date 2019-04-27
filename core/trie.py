@@ -9,7 +9,7 @@ Keys should be unique, values - any alphanumeric sequences
 from collections import defaultdict
 from functools import partial
 from itertools import chain, combinations
-from typing import Iterable, Iterator, Set
+from typing import Iterable, Iterator, List, Optional, Set
 
 from . import geo, utils
 
@@ -17,21 +17,13 @@ ITEMSKEY = "_items"
 SUFFIXKEY = "_suffix"
 KEYS = {ITEMSKEY, SUFFIXKEY}
 
+# ? bad idea, but ё is so rarely used
+REPLACEMENTS = str.maketrans("-ё", " е", "'’")  # from, to, remove
 
-def preprocess(word: str) -> str:
+
+def preprocess_words(word: str) -> List[str]:
     """Simplify word as much as possible"""
-    replacements = [("'", ""), ("ё", "е")]  # ? bad idea, but ё is so rarely used
-    for p in replacements:
-        word = word.replace(*p)
-    return word.lower()
-
-
-def preprocess_words(word: str) -> Iterable[str]:
-    """Simplify word as much as possible"""
-    if not word:
-        return []
-    word = word.replace("-", " ")
-    return (preprocess(w) for w in word.split())
+    return word.lower().translate(REPLACEMENTS).split() if word else []
 
 
 def _collect(node: dict, exact: bool) -> Iterable[int]:
@@ -49,11 +41,11 @@ def collect(node: dict, exact: bool) -> Set[int]:
 def _show(node: dict, prefix=""):
     """Recursively simple-print trie structure"""
     print(prefix)
-    for key in node.keys():
+    for key, value in node.items():
         if key in {ITEMSKEY, SUFFIXKEY}:
-            print(f"{prefix}{key}: {node[key]}")
+            print(f"{prefix}{key}: {value}")
         else:
-            _show(node[key], prefix + key)
+            _show(value, prefix + key)
 
 
 def _analyze(node: dict, depth=0, info=defaultdict(int)):
@@ -109,11 +101,11 @@ def lookup(root: dict, query: str, exact: bool = False) -> Set[int]:
     if not query:
         return set()
 
-    word_ids = []  # list of sets of ids of items that correspond to query
+    word_ids: List[Set[int]] = []  # ids of items that correspond to query
     for word in preprocess_words(query):
         node = root
         for c in word:
-            node = node.get(c)
+            node: Optional[dict] = node.get(c)
             if not node:
                 # dead-end for this word
                 word_ids.append(set())

@@ -68,7 +68,7 @@ class GeoItem(metaclass=GeoMeta):
 
     def __init__(self, names: LangNames, parent: Optional["GeoItem"] = None):
         self.name, self.name_uk, *_ = names
-        self.parent : Optional["GeoItem"] = parent
+        self.parent: Optional["GeoItem"] = parent
 
     def __iter__(self):
         """Iterate over Names"""
