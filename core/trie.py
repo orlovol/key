@@ -17,7 +17,7 @@ ITEMSKEY = "_items"
 SUFFIXKEY = "_suffix"
 KEYS = {ITEMSKEY, SUFFIXKEY}
 # replace shifty characters for trie only
-SUB_MAP = str.maketrans("-ёґ", " ег", "\"'’,.")  # from, to, remove
+SUB_MAP = str.maketrans("-ёґ", " ег", r'''{}()[]"'’,._<>:;!@#$%^&*+=''')  # from, to, remove
 LATCYR_MAP = str.maketrans("etiopahkxcbm", "етіоранкхсвм")
 LATIN = re.compile("[a-z]")
 
@@ -140,7 +140,7 @@ def suffixes(word: str) -> Iterator[str]:
 
 
 class Trie:
-    def __init__(self, items=None):
+    def __init__(self):
         self.root = utils.rec_dd()
         self._alphabet = set()
         self._indexed_items = 0
@@ -149,9 +149,6 @@ class Trie:
         self.collect = partial(collect, self.root)
         self.lookup = partial(lookup, self.root)
         self.show = partial(_show, self.root)
-
-        if items:
-            self.index(items)
 
     @property
     def alphabet(self):
