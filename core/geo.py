@@ -1,11 +1,12 @@
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import ClassVar, Dict, Iterable, Iterator, NamedTuple, Optional, Tuple
+from typing import ClassVar, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple
 
 RAIONKEY = "район"  # bilingual unique key for raion/district
 WORD_SEP = re.compile(r", (?![^(]*\))")
 OLD_NAME = re.compile(r"\s*\(\s*(?P<old_name>.*)\s*\)")
+SPACES = re.compile(" {2,}")
 
 
 class Name(NamedTuple):
@@ -78,8 +79,11 @@ class GeoItem(metaclass=GeoMeta):
 
     @classmethod
     def from_texts(cls, *texts: str):
-        # tuples of words in all languages for each level
-        level_words: Iterable[Tuple[str, ...]] = zip(*(WORD_SEP.split(word) for word in texts))
+        # (words of one lang) for each language
+        langs: Iterator[List[str]] = (WORD_SEP.split(SPACES.sub(" ", lang)) for lang in texts)
+        # (level words in one language) for each level
+        level_words: Iterable[Tuple[str, ...]] = zip(*langs)
+        # (names) for each level
         level_names: Iterable[LangNames] = map(to_names, level_words)
         return cls.parse(*level_names)
 
