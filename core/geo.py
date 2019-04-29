@@ -52,8 +52,8 @@ class GeoMeta(type):
         """Called for each class with this metaclass"""
         geo = super().__new__(cls, name, bases, dct)
         if bases:  # then it's GeoItem
-            geo._type = name.lower()
-            cls.registry[geo._type] = geo  # add geotype registry to meta
+            geo.type = name.lower()
+            cls.registry[geo.type] = geo  # add geotype registry to meta
         return geo
 
 
@@ -61,7 +61,7 @@ class GeoItem(metaclass=GeoMeta):
     """Simple class that contains name and type, without id"""
 
     __slots__ = ["name", "name_uk", "parent"]
-    _type = None
+    type = None
 
     def __init__(self, names: LangNames, parent: Optional["GeoItem"] = None):
         self.name, self.name_uk, *_ = names
@@ -95,6 +95,11 @@ class GeoItem(metaclass=GeoMeta):
     @classmethod
     def parse(cls, *names: LangNames):
         raise NotImplementedError("GeoItem is abstract")
+
+    @property
+    def item(self):
+        """Alias to simplify code when working with mixed GeoRecord/GeoItem content"""
+        return self
 
 
 @dataclass(frozen=True)

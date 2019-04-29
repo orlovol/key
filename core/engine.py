@@ -1,5 +1,6 @@
 from tqdm import tqdm
 from typing import Any, Iterable, Dict, Set, Iterator, List
+from functools import partial
 
 from . import data, geo, trie, utils
 
@@ -18,10 +19,7 @@ def _collect_names(geo_item: geo.GeoItem) -> Iterator[Iterator[str]]:
     """Return lang_name tuples for each level, increasing area size"""
     yield map(str, geo_item)
     while geo_item.parent:
-        if isinstance(geo_item.parent, geo.GeoRecord):
-            geo_item = geo_item.parent.item
-        else:
-            geo_item = geo_item.parent
+        geo_item = geo_item.parent.item
         yield map(str, geo_item)
 
 
@@ -31,20 +29,39 @@ def collect_names(geo_item: geo.GeoItem) -> Iterator[str]:
     return (", ".join(lang[::-1]) for lang in langs)
 
 
-def collect_data(index: dict) -> Iterator[List[str]]:
-    """Gather data rows for csv export"""
-    yield ["geo_id", "geo_type", "name", "name_uk"]
-    max_id = max(index)
-    # count up to nearest hundred
-    offset = (max_id // 100 + 1) * 100
-    offset_id = lambda id_: id_ if id_ > 0 else offset - id_
+def offset_id(offset: int, id_: int) -> int:
+    return id_ if id_ > 0 else offset - id_
 
-    for key in sorted(index, key=offset_id):
+
+def collect_rows(index: dict) -> Iterator[List[str]]:
+    """Gather data for csv export same as input csv"""
+    yield ["geo_id", "geo_type", "name", "name_uk"]
+    # count up to nearest hundred frrom max id, and append added items from there
+    offset = partial(offset_id, (max(index) // 100 + 1) * 100)
+    # sorted by id
+    for key in sorted(index, key=offset):
         record = index[key]
-        geo_id = offset_id(record.id)
+        geo_id = offset(record.id)
         geo_item = record.item
-        geo_type = geo_item._type
+        geo_type = geo_item.type
         yield [geo_id, geo_type, *collect_names(geo_item)]
+
+
+def collect_tree(index: dict) -> Iterator[List[str]]:
+    """Gather data for csv export as tree with parent_id"""
+    yield ["geo_id", "geo_parent_id", "geo_type", "name", "name_uk"]
+    # count up to nearest hundred frrom max id, and append added items from there
+    offset = partial(offset_id, (max(index) // 100 + 1) * 100)
+    order = tuple(geo.GeoMeta.registry)
+    # sorted by decreasing area
+    for key in sorted(index, key=lambda x: order.index(index.get(x).item.type)):
+        record = index[key]
+        geo_id = offset(record.id)
+        geo_item = record.item
+        geo_parent_id = geo_item.parent and offset(geo_item.parent.id)  # can be None
+        geo_type = geo_item.type
+        names = iter(geo_item)
+        yield [geo_id, geo_parent_id, geo_type, *names]
 
 
 def same_parents(child: geo.GeoItem, possible_sibling: geo.GeoItem) -> bool:
@@ -81,9 +98,10 @@ class Engine:
             self.add(item)
 
     @utils.profile
-    def export(self, path):
+    def export(self, path, as_tree=False):
         """Save data from index into csv"""
-        data.write_csv(path, collect_data(self._index))
+        collect = collect_tree if as_tree else collect_rows
+        data.write_csv(path, collect(self._index))
         print(f"Exported to {path}")
 
     def search(self, name: str, ids: Set[int]) -> List[geo.GeoRecord]:
@@ -165,7 +183,7 @@ class Engine:
         count = total = len(results)
         for r in results:
             obj = self._index[r]
-            items = res.setdefault(obj.item._type, [])
+            items = res.setdefault(obj.item.type, [])
             if len(items) < maxcount:
                 items.append(obj)
                 count -= 1
