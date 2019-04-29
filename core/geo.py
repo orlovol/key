@@ -83,7 +83,7 @@ class GeoItem(metaclass=GeoMeta):
         return f'{self.__class__.__name__}("{self.name}")'
 
     @classmethod
-    def from_texts(cls, *texts: str):
+    def from_row_record(cls, *texts: str) -> "GeoItem":
         # (words of one lang) for each language
         langs: Iterator[List[str]] = (WORD_SEP.split(SPACES.sub(" ", lang)) for lang in texts)
         # (level words in one language) for each level
@@ -93,8 +93,12 @@ class GeoItem(metaclass=GeoMeta):
         return cls.parse(*level_names)
 
     @classmethod
+    def from_tree_record(cls, *names: str, parent: Optional["GeoItem"]):
+        return cls(to_names(names), parent)
+
+    @classmethod
     def parse(cls, *names: LangNames):
-        raise NotImplementedError("GeoItem is abstract")
+        raise NotImplementedError(f"Raw GeoItem can't be parsed from {names}")
 
     @property
     def item(self):

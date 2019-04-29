@@ -35,7 +35,7 @@ def offset_id(offset: int, id_: int) -> int:
 
 
 def collect_rows(index: dict) -> Iterator[list]:
-    """Gather data for csv export same as input csv"""
+    """Gather data for csv export as denormalized tree"""
     yield ["geo_id", "geo_type", "name", "name_uk"]
     # count up to nearest hundred frrom max id, and append added items from there
     offset = partial(offset_id, (max(index) // 100 + 1) * 100)
@@ -61,8 +61,7 @@ def collect_tree(index: dict) -> Iterator[list]:
         geo_item = record.item
         geo_parent_id = geo_item.parent and offset(geo_item.parent.id)  # can be None
         geo_type = geo_item.type
-        names = iter(geo_item)
-        yield [geo_id, geo_parent_id, geo_type, *names]
+        yield [geo_id, geo_parent_id, geo_type, *iter(geo_item)]
 
 
 def same_parents(child1: geo.GeoItem, child2: geo.GeoItem) -> bool:
@@ -93,13 +92,30 @@ def same_parents(child1: geo.GeoItem, child2: geo.GeoItem) -> bool:
     return False
 
 
+def read_rows(geo_id: int, geo_type: str, *names: str) -> geo.GeoRecord:
+    """Read denormalized csv rows into GeoRecords.
+    Data should be sorted by area decreasing"""
+    cls = geo.GeoMeta.registry[geo_type]
+    record = geo.GeoRecord(geo_id, cls.from_row_record(*names))
+    return record
+
+
+def read_tree(geo_id: int, geo_parent_id: int, geo_type: str, *names: str) -> geo.GeoRecord:
+    """Read tree with parent_id csv rows into GeoRecords.
+    Data should be sorted by area decreasing"""
+    cls = geo.GeoMeta.registry[geo_type]
+    parent = geo.GeoRecord.registry[geo_parent_id] if geo_parent_id else None
+    item = cls.from_tree_record(*names, parent=parent)
+    record = geo.GeoRecord(geo_id, item)
+    return record
+
+
 def read_items(csv: str) -> Iterator[geo.GeoRecord]:
-    """Read csv rows into GeoRecords"""
-    for row in data.read_csv(csv):
-        geo_id, geo_type, *names = row
-        cls = geo.GeoMeta.registry[geo_type]
-        item = geo.GeoRecord(int(geo_id), cls.from_texts(*names))
-        yield item
+    rows = data.read_csv(csv)
+    csv_type = next(rows)
+    make_record = read_tree if csv_type == data.TreeRow else read_rows
+    for row in rows:
+        yield make_record(*row)
 
 
 class Engine:
