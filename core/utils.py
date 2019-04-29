@@ -10,7 +10,7 @@ def empty_profile(f):
 
 # catch nameerror when mprof is not used
 try:
-    profile = profile
+    profile = profile  # type: ignore
 except NameError:
     profile = empty_profile
 

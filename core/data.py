@@ -93,7 +93,7 @@ def read_items(csv: str) -> Iterator[geo.GeoRecord]:
     csv_type = next(rows)
     make_record = _read_tree if csv_type == TreeRow else _read_rows
     for row in rows:
-        yield make_record(*row)
+        yield make_record(*row)  # type: ignore
 
 
 # EXPORT

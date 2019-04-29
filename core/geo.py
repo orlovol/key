@@ -1,7 +1,6 @@
 import re
-
 from dataclasses import dataclass
-from typing import ClassVar, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple
+from typing import ClassVar, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple, Union
 
 RAIONKEY = "район"  # bilingual unique key for raion/district
 WORD_SEP = re.compile(r", (?![^(]*\))")
@@ -24,6 +23,8 @@ class Name(NamedTuple):
 
 # Multilingual Name collection
 LangNames = Tuple[Name, ...]
+
+AnyGeo = Union["GeoItem", "GeoRecord", None]
 
 
 def _words_to_names(lang_words: Iterable[str]) -> Iterator[Name]:
@@ -63,9 +64,9 @@ class GeoItem(metaclass=GeoMeta):
     __slots__ = ["name", "name_uk", "parent"]
     type = None
 
-    def __init__(self, names: LangNames, parent: Optional["GeoItem"] = None):
+    def __init__(self, names: LangNames, parent: AnyGeo = None):
         self.name, self.name_uk, *_ = names
-        self.parent: Optional["GeoItem"] = parent
+        self.parent: AnyGeo = parent
 
     def __iter__(self):
         """Iterate over languages/Names"""
@@ -93,7 +94,7 @@ class GeoItem(metaclass=GeoMeta):
         return cls.parse(*level_names)
 
     @classmethod
-    def from_tree_record(cls, *names: str, parent: Optional["GeoItem"]):
+    def from_tree_record(cls, *names: str, parent: Optional["GeoRecord"]):
         return cls(to_names(names), parent)
 
     @classmethod

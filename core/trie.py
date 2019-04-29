@@ -125,7 +125,7 @@ def lookup(root: dict, query: str, exact: bool = False) -> Set[int]:
     for word in preprocess_words(query):
         node = root
         for c in word:
-            node: Optional[dict] = node.get(c)
+            node: Optional[dict] = node.get(c)  # type: ignore
             if not node:
                 # dead-end for this word
                 word_ids.append(set())

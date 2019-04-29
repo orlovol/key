@@ -66,7 +66,7 @@ class Engine:
         data.write_items(self._index, path, as_tree)
         print(f"Exported {['denormalized', 'tree'][as_tree]} data to {path}")
 
-    def search(self, name: str, ids: Set[int]) -> List[geo.GeoRecord]:
+    def index_match(self, name: str, ids: Set[int]) -> List[geo.GeoRecord]:
         """Find id by exact name in subset of ids"""
         records = [self._index.get(i) for i in ids]
         matches = [r for r in records if str(r.item.name) == name]
@@ -96,7 +96,7 @@ class Engine:
 
             # * lookup by main lang, full name
             query = str(parent.name)
-            ids = self._trie.lookup(query, exact=True)
+            ids = self.lookup(query, exact=True)
             if ids:
                 if len(ids) == 1:
                     # the one parent that we can't choose
@@ -110,7 +110,7 @@ class Engine:
                     # Most often word "superset" is matched, because
                     # names are split into many words: "aaa-bbb": "aaa", "bbb"
                     # Search by full name in these ids
-                    results = self.search(query, ids)
+                    results = self.index_match(query, ids)
 
                     # We may find multiple items with same name, but they may
                     # have different parents. Let's check them
