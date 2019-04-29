@@ -1,5 +1,6 @@
 from tqdm import tqdm
 from typing import Any, Iterable, Dict, Set, Iterator, List
+from difflib import SequenceMatcher
 from functools import partial
 
 from . import data, geo, trie, utils
@@ -33,7 +34,7 @@ def offset_id(offset: int, id_: int) -> int:
     return id_ if id_ > 0 else offset - id_
 
 
-def collect_rows(index: dict) -> Iterator[List[str]]:
+def collect_rows(index: dict) -> Iterator[list]:
     """Gather data for csv export same as input csv"""
     yield ["geo_id", "geo_type", "name", "name_uk"]
     # count up to nearest hundred frrom max id, and append added items from there
@@ -47,14 +48,14 @@ def collect_rows(index: dict) -> Iterator[List[str]]:
         yield [geo_id, geo_type, *collect_names(geo_item)]
 
 
-def collect_tree(index: dict) -> Iterator[List[str]]:
+def collect_tree(index: dict) -> Iterator[list]:
     """Gather data for csv export as tree with parent_id"""
     yield ["geo_id", "geo_parent_id", "geo_type", "name", "name_uk"]
     # count up to nearest hundred frrom max id, and append added items from there
     offset = partial(offset_id, (max(index) // 100 + 1) * 100)
     order = tuple(geo.GeoMeta.registry)
     # sorted by decreasing area
-    for key in sorted(index, key=lambda x: order.index(index.get(x).item.type)):
+    for key in sorted(index, key=lambda x: order.index(index[x].item.type)):
         record = index[key]
         geo_id = offset(record.id)
         geo_item = record.item
@@ -64,11 +65,32 @@ def collect_tree(index: dict) -> Iterator[List[str]]:
         yield [geo_id, geo_parent_id, geo_type, *names]
 
 
-def same_parents(child: geo.GeoItem, possible_sibling: geo.GeoItem) -> bool:
-    """Check if two items have the same parent. Should have similar names"""
-    expected = child.parent  # parent that we expect
-    possible = possible_sibling.parent
-    return expected == possible
+def same_parents(child1: geo.GeoItem, child2: geo.GeoItem) -> bool:
+    """Check if two items have the same parent. Should have same types and similar names"""
+    if child1.type != child2.type:
+        return False
+
+    if child1.parent != child2.parent:
+        return False
+
+    # okay so types/parents are same, that's good, but children names may not match,
+    # they may have similar names, like "anne" and "marianne" but those are different
+    # let's compare fullnames, to see if they're really similar
+    fullname1, fullname2, oldname = str(child1.name), str(child2.name), child2.name.old_name
+    matcher = SequenceMatcher(lambda x: x in "( )", fullname1, fullname2)
+
+    # they are
+    if matcher.real_quick_ratio() == 1.0:
+        return True
+
+    # if child1 has no old name, maybe its regular name is actually old one
+    # let's check if there's oldname in prefix/suffix (because there can be type_name around)
+    if (child1.name.old_name is None and oldname is not None) and (
+        fullname1.endswith(oldname) or fullname1.startswith(oldname)
+    ):
+        return True
+
+    return False
 
 
 def read_items(csv: str) -> Iterator[geo.GeoRecord]:
@@ -140,7 +162,7 @@ class Engine:
                     # the one parent that we can't choose
                     parent_record = self._index[ids.pop()]
                     if not same_parents(parent, parent_record.item):
-                        # but it's grandparent is not ours, let's add correct parent
+                        # let's add correct parent
                         parent_record = self.add_item(parent)
 
                 elif len(ids) > 1:
