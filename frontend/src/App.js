@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import { debounce } from 'lodash';
+import axios from 'axios';
 
 import './App.css';
 
@@ -24,12 +25,21 @@ class App extends Component {
   }
 
   handleFetch = debounce(
-    async function (q) {
-      const res = await fetch(api.location())
-      const data = await res.json()
-      this.setState({ locations: data.results })
+    async function (query) {
+      try {
+        const { data: { results: locations } } = await axios.get(
+          api.location(),
+          {
+            params: { name: query.trim() }, // TODO: search only on at least two characters
+          }
+        )
+        this.setState({ locations })
+      } catch (err) {
+        console.error(err)
+        this.setState({ locations: [] })
+      }
     }
-    , 300
+    , 150
   )
 
   handleSubmit(e) {
