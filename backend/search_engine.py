@@ -1,4 +1,5 @@
 import os
+import pathlib
 
 from flask import jsonify
 
@@ -10,7 +11,8 @@ class SearchEngine:
         self.app = app
 
         csv = os.getenv("GEODATA")
-        self.engine = engine.Engine(file=csv)
+        csv_path = pathlib.Path(__file__).parents[1] / csv
+        self.engine = engine.Engine(file=csv_path)
 
         if app is not None:
             self.init_app(app)
