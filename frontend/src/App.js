@@ -1,66 +1,64 @@
-import React, { Component } from 'react';
-import { debounce } from 'lodash';
-import axios from 'axios';
+import React, { Component } from "react";
+import { debounce } from "lodash";
+import axios from "axios";
 
-import './variables.css';
-import './App.css';
+import "./variables.css";
+import "./App.css";
 
-import api from './api'
-import Search from './components/Search'
-import Locations from './components/Locations'
+import api from "./api";
+import Search from "./components/Search";
+import Locations from "./components/Locations";
 
 class App extends Component {
   constructor(props) {
-    super(props)
-    this.handleFetch = this.handleFetch.bind(this)
-    this.handleSubmit = this.handleSubmit.bind(this)
-    this.handleChange = this.handleChange.bind(this)
-    this.handleClear = this.handleClear.bind(this)
+    super(props);
+    this.handleFetch = this.handleFetch.bind(this);
+    this.handleSubmit = this.handleSubmit.bind(this);
+    this.handleChange = this.handleChange.bind(this);
+    this.handleClear = this.handleClear.bind(this);
   }
 
   state = {
-    query: '',
+    query: "",
     locations: []
-  }
+  };
 
   handleSearch(locations) {
-    this.setState({ locations: locations })
+    this.setState({ locations: locations });
   }
 
-  handleFetch = debounce(
-    async function (query) {
+  handleFetch = debounce(async function(query) {
+    const name = query.trim();
+    if (name.length > 1) {
       try {
-        const { data: { results: locations } } = await axios.get(
-          api.location(),
-          {
-            params: { name: query.trim() }, // TODO: search only on at least two characters
-          }
-        )
-        this.setState({ locations })
+        const {
+          data: { results: locations }
+        } = await axios.get(api.location(), {
+          params: { name: name }
+        });
+        this.setState({ locations });
       } catch (err) {
-        console.error(err)
-        this.setState({ locations: [] })
+        console.error(err);
+        this.setState({ locations: [{ id: 0, name: "No results", type: "" }] });
       }
+    } else {
+      this.setState({ locations: [] });
     }
-    , 150
-  )
+  }, 150);
 
   handleSubmit(e) {
     // TODO: implement
-    e.preventDefault()
+    e.preventDefault();
   }
 
   handleChange(e) {
-    this.setState(
-      { query: e.target.value },
-      () => this.handleFetch(this.state.query)
-    )
+    this.setState({ query: e.target.value }, () =>
+      this.handleFetch(this.state.query)
+    );
   }
 
   handleClear(e) {
-    this.setState(
-      { query: "", locations: [] }
-    )
+    this.setState({ query: "", locations: [] });
   }
 
   render() {
