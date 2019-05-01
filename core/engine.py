@@ -1,5 +1,5 @@
 from tqdm import tqdm
-from typing import Any, Iterable, Dict, Set, List
+from typing import Any, Iterable, Dict, Set, List, Tuple
 from difflib import SequenceMatcher
 
 from . import data, geo, trie, utils
@@ -139,21 +139,34 @@ class Engine:
         )
         print(f"\n{info}\n")
 
-    def filter(self, results: Set[int], maxcount=3) -> Dict:
+    def filter(self, results: Set[int], as_dict=True, maxcount=3) -> Dict:
         """Filter & format search results"""
-        res: Dict[str, Any] = {}
-        count = total = len(results)
+        items: List[Any] = []
+        hidden = count = len(results)
         for r in results:
-            obj = self._index[r]
-            items = res.setdefault(obj.item.type, [])
+            record = self._index[r]
             if len(items) < maxcount:
-                items.append(obj)
-                count -= 1
+                item = record.as_dict() if as_dict else record
+                items.append(item)
+                hidden -= 1
+        return {"results": items, "hidden": hidden, "count": count}
 
-        if count:
-            res["~more~"] = count
-        res["~total~"] = total
-        return res
+    def wrong_layout(self, query: str) -> Tuple[str, Set[int]]:
+        """Search same query in other keyboard layouts.
+        Return translated query and results"""
+        for m in KEYMAPS:
+            tr = query.translate(m)
+            ids = self.lookup(tr)
+            if ids:
+                return (tr, ids)
+        return (query, set())
+
+    def search(self, query):
+        """Perform search and return results"""
+        ids = self.lookup(query)
+        if not ids:
+            _, ids = self.wrong_layout(query)
+        return self.filter(ids, as_dict=True, maxcount=20)
 
     def interactive(self):
         query = "Enter query (empty to exit):"
@@ -167,13 +180,9 @@ class Engine:
             if not query:
                 continue
 
-            res = self.lookup(query)
-            if not res:
-                for m in KEYMAPS:
-                    tr = query.translate(m)
-                    res = self.lookup(tr)
-                    if res:
-                        print(f"Did you mean _{tr}_?")
-                        break
-            print(self.filter(res, 3))
+            ids = self.lookup(query)
+            if not ids:
+                tr, ids = self.wrong_layout(query)
+                ids and print(f"Did you mean _{tr}_?")
+            print(self.filter(ids, 3))
         print("Bye!")

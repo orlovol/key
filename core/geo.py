@@ -27,6 +27,21 @@ LangNames = Tuple[Name, ...]
 AnyGeo = Union["GeoItem", "GeoRecord", None]
 
 
+def _collect_names(geo_item: "GeoItem", include_child=True) -> Iterator[Iterator[str]]:
+    """Return lang_name tuples for each level, increasing area size"""
+    if include_child:
+        yield map(str, geo_item)
+    while geo_item.parent:
+        geo_item = geo_item.parent.item
+        yield map(str, geo_item)
+
+
+def collect_names(geo_item: "GeoItem", include_child=True) -> Iterator[str]:
+    """Return full names for all languages, decreasing area size"""
+    langs = zip(*_collect_names(geo_item, include_child))
+    return (", ".join(lang[::-1]) for lang in langs)
+
+
 def _words_to_names(lang_words: Iterable[str]) -> Iterator[Name]:
     """Convert tuples of name strings into Name items and wrap into LangNames"""
     old_name = None
@@ -131,6 +146,11 @@ class GeoRecord:
         if isinstance(other, GeoRecord):
             return (self.id, self.item) == (other.id, other.item)
         return NotImplemented
+
+    def as_dict(self):
+        names = map(str, self.item)
+        parents = list(collect_names(self.item, include_child=False))
+        return {"id": self.id, "type": self.item.type, "names": list(zip(names, parents))}
 
 
 class Region(GeoItem):

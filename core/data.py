@@ -99,20 +99,6 @@ def read_items(csv: str) -> Iterator[geo.GeoRecord]:
 # EXPORT
 
 
-def _collect_names(geo_item: geo.GeoItem) -> Iterator[Iterator[str]]:
-    """Return lang_name tuples for each level, increasing area size"""
-    yield map(str, geo_item)
-    while geo_item.parent:
-        geo_item = geo_item.parent.item
-        yield map(str, geo_item)
-
-
-def collect_names(geo_item: geo.GeoItem) -> Iterator[str]:
-    """Return full names for all languages, decreasing area size"""
-    langs = zip(*_collect_names(geo_item))
-    return (", ".join(lang[::-1]) for lang in langs)
-
-
 def _collect_rows(index: dict) -> Iterator[list]:
     """Gather data for csv export as denormalized tree"""
     yield ["geo_id", "geo_type", "name", "name_uk"]
@@ -124,7 +110,7 @@ def _collect_rows(index: dict) -> Iterator[list]:
         geo_id = offset(record.id)
         geo_item = record.item
         geo_type = geo_item.type
-        yield [geo_id, geo_type, *collect_names(geo_item)]
+        yield [geo_id, geo_type, *geo.collect_names(geo_item)]
 
 
 def _collect_tree(index: dict) -> Iterator[list]:
