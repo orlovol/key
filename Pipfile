@@ -8,10 +8,14 @@ python_version = "3.7"
 
 [packages]
 tqdm = "*"
-regex = "*"
+flask = "*"
+python-dotenv = "*"
 
 [dev-packages]
 black = "==19.3b0"
 "flake8" = "*"
 memory-profiler = "*"
 matplotlib = "*"
+"flake8-mypy" = "*"
+vulture = "*"
+pydeps = "*"
