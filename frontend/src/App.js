@@ -52,7 +52,7 @@ class App extends Component {
           handleSubmit={this.handleSubmit}
           handleChange={this.handleChange}
         />
-        <Locations data={this.state.locations} />
+        <Locations locations={this.state.locations} />
       </div>
     );
   }
