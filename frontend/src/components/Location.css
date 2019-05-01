@@ -1,0 +1,10 @@
+.location {
+  font-size: 1.4rem;
+  line-height: 1.5;
+  padding: 10px;
+  color: var(--font);
+}
+
+.location:not(:last-child) {
+  border-bottom: 1px dashed var(--font);
+}

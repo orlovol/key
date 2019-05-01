@@ -1,3 +1,21 @@
 .App {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  margin: auto;
+  background: var(--background);
+  min-height: var(--app-h);
+  overflow: hidden;
+}
+
+.search-container {
+  display: flex;
+  width: 100%;
+  height: var(--search-h);
+}
+
+.location-container {
+  display: flex;
+  width: 100%;
+  height: calc(var(--app-h) - var(--search-h) - 5vh);
+  overflow-y: scroll;
 }

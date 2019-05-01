@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import { debounce } from 'lodash';
 import axios from 'axios';
 
+import './variables.css';
 import './App.css';
 
 import api from './api'
