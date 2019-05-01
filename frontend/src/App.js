@@ -11,12 +11,14 @@ import Locations from './components/Locations'
 class App extends Component {
   constructor(props) {
     super(props)
-    this.handleChange = this.handleChange.bind(this)
     this.handleFetch = this.handleFetch.bind(this)
+    this.handleSubmit = this.handleSubmit.bind(this)
+    this.handleChange = this.handleChange.bind(this)
+    this.handleClear = this.handleClear.bind(this)
   }
 
   state = {
-    query: 'default text',
+    query: '',
     locations: []
   }
 
@@ -54,15 +56,26 @@ class App extends Component {
     )
   }
 
+  handleClear(e) {
+    this.setState(
+      { query: "", locations: [] }
+    )
+  }
+
   render() {
     return (
       <div className="App">
-        <Search
-          query={this.state.query}
-          handleSubmit={this.handleSubmit}
-          handleChange={this.handleChange}
-        />
-        <Locations locations={this.state.locations} />
+        <div className="search-container">
+          <Search
+            query={this.state.query}
+            handleSubmit={this.handleSubmit}
+            handleChange={this.handleChange}
+            handleClear={this.handleClear}
+          />
+        </div>
+        <div className="location-container">
+          <Locations locations={this.state.locations} />
+        </div>
       </div>
     );
   }
