@@ -34,7 +34,7 @@ class App extends Component {
         const {
           data: { results: locations }
         } = await axios.get(api.location(), {
-          params: { name: name }
+          params: { q: name }
         });
         this.setState({ locations });
       } catch (err) {

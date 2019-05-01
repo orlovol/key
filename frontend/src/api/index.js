@@ -1,8 +1,8 @@
-const baseUrl = "https://rickandmortyapi.com/api"
+const baseUrl = "https://orlovole.eu.pythonanywhere.com/api/v1"
 
 const api = {
   location() {
-    const method = "location"
+    const method = "search"
     return `${baseUrl}/${method}`
   }
 }
