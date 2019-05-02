@@ -3,6 +3,22 @@
   line-height: 1.5;
   padding: 10px;
   color: var(--font);
+  font-family: "Roboto Slab", serif;
+}
+
+.location__item {
+  margin-bottom: 5px;
+}
+
+.location__parent {
+  font-size: 1.2rem;
+  opacity: 0.9;
+}
+
+.location__type {
+  font-size: 1rem;
+  opacity: 0.5;
+  text-transform: lowercase;
 }
 
 .location:not(:last-child) {

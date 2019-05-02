@@ -7,15 +7,30 @@
   overflow: hidden;
 }
 
-.search-container {
+.logo {
   display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.logo p {
+  margin-left: 10px;
+  font-size: 5rem;
+  font-weight: 700;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  height: var(--search-h);
+  justify-content: center;
+  align-items: center;
+  height: var(--header-h);
 }
 
 .location-container {
   display: flex;
   width: 100%;
-  height: calc(var(--app-h) - var(--search-h) - 5vh);
+  height: calc(var(--app-h) - var(--header-h) - 5vh);
   overflow-y: scroll;
 }

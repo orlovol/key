@@ -1,9 +1,9 @@
 :root {
-    --background: #ECECEC;
-    --accent: #F62459;
-    --font: #2E3131;
-    --brd: 4px;
-    --search-h: 30vh;
-    --app-h: 100vh;
+  --background: #ececec;
+  --accent: #d81c1c;
+  --accent2: #053d82;
+  --font: #2e3131;
+  --brd: 4px;
+  --header-h: 30vh;
+  --app-h: 100vh;
 }
-

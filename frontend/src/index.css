@@ -17,3 +17,8 @@ code {
 em {
   font-weight: 700;
 }
+
+*:focus {
+  outline: none;
+  box-shadow: 0 0 3px #053d8255;
+}
