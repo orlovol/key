@@ -6,6 +6,7 @@ import "./variables.css";
 import "./App.css";
 
 import api from "./api";
+import Logo from "./components/Logo";
 import Search from "./components/Search";
 import Locations from "./components/Locations";
 
@@ -20,6 +21,7 @@ class App extends Component {
 
   state = {
     query: "",
+    responseQuery: "",
     locations: []
   };
 
@@ -32,22 +34,21 @@ class App extends Component {
     if (name.length > 1) {
       try {
         const {
-          data: { results: locations }
+          data: { results: locations, query: responseQuery }
         } = await axios.get(api.location(), {
           params: { q: name }
         });
-        this.setState({ locations });
+        this.setState({ locations, responseQuery });
       } catch (err) {
         console.error(err);
-        this.setState({ locations: [{ id: 0, name: "No results", type: "" }] });
+        this.setState({ locations: [], responseQuery: "" });
       }
     } else {
-      this.setState({ locations: [] });
+      this.setState({ locations: [], responseQuery: "" });
     }
-  }, 150);
+  }, 100);
 
   handleSubmit(e) {
-    // TODO: implement
     e.preventDefault();
   }
 
@@ -64,16 +65,20 @@ class App extends Component {
   render() {
     return (
       <div className="App">
-        <div className="search-container">
+        <header className="header">
+          <Logo />
           <Search
             query={this.state.query}
             handleSubmit={this.handleSubmit}
             handleChange={this.handleChange}
             handleClear={this.handleClear}
           />
-        </div>
+        </header>
         <div className="location-container">
-          <Locations locations={this.state.locations} />
+          <Locations
+            locations={this.state.locations}
+            query={this.state.responseQuery}
+          />
         </div>
       </div>
     );
