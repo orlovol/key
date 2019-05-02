@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from itertools import zip_longest
 from typing import ClassVar, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple, Union
 
 RAIONKEY = "район"  # bilingual unique key for raion/district
@@ -149,8 +150,8 @@ class GeoRecord:
 
     def as_dict(self):
         names = map(str, self.item)
-        parents = list(collect_names(self.item, include_child=False))
-        return {"id": self.id, "type": self.item.type, "names": list(zip(names, parents))}
+        parents = collect_names(self.item, include_child=False)
+        return {"id": self.id, "type": self.item.type, "names": list(zip_longest(names, parents))}
 
 
 class Region(GeoItem):
