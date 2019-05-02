@@ -139,34 +139,34 @@ class Engine:
         )
         print(f"\n{info}\n")
 
-    def filter(self, results: Set[int], as_dict=True, maxcount=3) -> Dict:
+    def filter(self, results: Set[int], query: str, as_dict=True, maxcount=3) -> Dict:
         """Filter & format search results"""
         items: List[Any] = []
         hidden = count = len(results)
         for r in results:
             record = self._index[r]
             if len(items) < maxcount:
-                item = record.as_dict() if as_dict else record
+                item = record.as_dict(query) if as_dict else record
                 items.append(item)
                 hidden -= 1
-        return {"results": items, "hidden": hidden, "count": count}
+        return {"results": items, "query": query, "hidden": hidden, "count": count}
 
     def wrong_layout(self, query: str) -> Tuple[str, Set[int]]:
         """Search same query in other keyboard layouts.
         Return translated query and results"""
         for m in KEYMAPS:
-            tr = query.translate(m)
-            ids = self.lookup(tr)
+            translated = query.translate(m)
+            ids = self.lookup(translated)
             if ids:
-                return (tr, ids)
+                return (translated, ids)
         return (query, set())
 
     def search(self, query):
         """Perform search and return results"""
         ids = self.lookup(query)
         if not ids:
-            _, ids = self.wrong_layout(query)
-        return self.filter(ids, as_dict=True, maxcount=20)
+            query, ids = self.wrong_layout(query)
+        return self.filter(ids, query=query, as_dict=True, maxcount=20)
 
     def interactive(self):
         query = "Enter query (empty to exit):"
@@ -182,7 +182,7 @@ class Engine:
 
             ids = self.lookup(query)
             if not ids:
-                tr, ids = self.wrong_layout(query)
-                ids and print(f"Did you mean _{tr}_?")
-            print(self.filter(ids, 3))
+                query, ids = self.wrong_layout(query)
+                ids and print(f"Did you mean _{query}_?")
+            print(self.filter(ids, query, 3))
         print("Bye!")

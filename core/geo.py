@@ -148,10 +148,16 @@ class GeoRecord:
             return (self.id, self.item) == (other.id, other.item)
         return NotImplemented
 
-    def as_dict(self):
-        names = map(str, self.item)
+    def as_dict(self, query: str) -> Dict:
+        children = map(str, self.item)
         parents = collect_names(self.item, include_child=False)
-        return {"id": self.id, "type": self.item.type, "names": list(zip_longest(names, parents))}
+
+        # sort by most likely query match
+        names = sorted(
+            zip_longest(children, parents), key=lambda pair: query in pair[0].lower(), reverse=True
+        )
+
+        return {"id": self.id, "type": self.item.type, "names": names}
 
 
 class Region(GeoItem):
