@@ -8,7 +8,7 @@ Keys should be unique, values - any alphanumeric sequences
 import re
 from collections import defaultdict
 from functools import partial
-from itertools import chain, combinations
+from itertools import chain
 from typing import Iterable, Iterator, List, Optional, Set
 
 from . import geo, utils
@@ -116,8 +116,8 @@ def analyze(node: dict, sizes=False):
     return dict(info)
 
 
-def lookup(root: dict, query: str, exact: bool = False) -> Set[int]:
-    """Move down from specified root node, following query, and collect items from there"""
+def lookup(root: dict, query: str, exact: bool = False) -> List[Set[int]]:
+    """Move down from specified root node, following query, and collect items ids for each word"""
     if not query:
         return set()
 
@@ -133,15 +133,7 @@ def lookup(root: dict, query: str, exact: bool = False) -> Set[int]:
         else:
             word_ids.append(collect(node, exact))
 
-    id_sets = len(word_ids)
-    if id_sets == 2 or exact:
-        return set.intersection(*word_ids)
-
-    if id_sets > 2:
-        # calculate union of paired intersections
-        return set.union(*(set.intersection(*pair) for pair in combinations(word_ids, 2)))
-
-    return word_ids[0]
+    return word_ids
 
 
 class Trie:

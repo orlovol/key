@@ -1,9 +1,11 @@
-from tqdm import tqdm
-from typing import Any, Iterable, Dict, Set, List, Tuple
 from difflib import SequenceMatcher
+from itertools import combinations, groupby
+from pprint import pprint
+from typing import Any, Dict, Iterable, List, Set, Tuple
+
+from tqdm import tqdm
 
 from . import data, geo, trie, utils
-
 
 # latin to cyrillic keyboard layout map
 keymap_ru = str.maketrans(
@@ -43,6 +45,18 @@ def same_parents(child1: geo.GeoItem, child2: geo.GeoItem) -> bool:
     return False
 
 
+def process_id_sets(*word_ids: Set[int], exact: bool) -> Set[int]:
+    """Suitable for same-level search words"""
+    id_sets = len(word_ids)
+    if id_sets == 2 or exact:
+        return set.intersection(*word_ids)
+
+    if id_sets > 2:
+        # calculate union of paired intersections
+        return set().union(*(set.intersection(*pair) for pair in combinations(word_ids, 2)))
+
+    return word_ids[0]
+
 class Engine:
     def __init__(self, file=None):
         self._trie = trie.Trie()
@@ -54,6 +68,11 @@ class Engine:
         if file:
             self.index(data.read_items(file))
 
+
+    def lookup_same_level(self, query: str) -> Set[int]:
+        exact = True
+        word_ids = self._trie.lookup(query, exact)
+        return process_id_sets(*word_ids, exact=exact)
     @utils.profile
     def index(self, items: Iterable[geo.GeoRecord]) -> None:
         """Add collection of geo items to the trie"""
@@ -96,7 +115,7 @@ class Engine:
 
             # * lookup by main lang, full name
             query = str(parent.name)
-            ids = self.lookup(query, exact=True)
+            ids = self.lookup_same_level(query, exact=True)
             if ids:
                 if len(ids) == 1:
                     # the one parent that we can't choose
