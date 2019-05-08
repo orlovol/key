@@ -143,6 +143,9 @@ class GeoRecord:
                 raise ValueError(f"Collision with existing {obj}: ({id}, {item})")
         return obj
 
+    def __hash__(self):
+        return hash(self.id)
+
     def __eq__(self, other):
         if isinstance(other, GeoRecord):
             return (self.id, self.item) == (other.id, other.item)

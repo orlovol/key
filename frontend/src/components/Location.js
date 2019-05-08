@@ -1,4 +1,6 @@
-import React, { Fragment } from "react";
+import React from "react";
+import Highlighter from "react-highlight-words";
+
 import "./Location.css";
 
 const Type_Map = {
@@ -17,19 +19,12 @@ const Location = ({ location, query }) => {
   const [name, parent] = relevantName;
 
   const nameMatched = name => {
-    const queryPos = name.toLowerCase().indexOf(query, 0);
-    if (queryPos < 0) {
-      return name;
-    }
-    const prefix = name.slice(0, queryPos);
-    const match = name.slice(queryPos, queryPos + query.length);
-    const suffix = name.slice(queryPos + query.length);
     return (
-      <Fragment>
-        {prefix}
-        <em>{match}</em>
-        {suffix}
-      </Fragment>
+      <Highlighter
+        searchWords={query.split(' ')}
+        highlightTag={'em'}
+        textToHighlight={name}
+      />
     );
   };
 
