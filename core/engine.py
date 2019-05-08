@@ -45,17 +45,63 @@ def same_parents(child1: geo.GeoItem, child2: geo.GeoItem) -> bool:
     return False
 
 
-def process_id_sets(*word_ids: Set[int], exact: bool) -> Set[int]:
+def process_sets(*sets: set, exact: bool = False) -> set:
     """Suitable for same-level search words"""
-    id_sets = len(word_ids)
+    id_sets = len(sets)
     if id_sets == 2 or exact:
-        return set.intersection(*word_ids)
+        return set.intersection(*sets)
 
     if id_sets > 2:
         # calculate union of paired intersections
-        return set().union(*(set.intersection(*pair) for pair in combinations(word_ids, 2)))
+        return set().union(*(set.intersection(*pair) for pair in combinations(sets, 2)))
 
-    return word_ids[0]
+    return sets[0]
+
+
+def split_sets(a: set, b: set) -> Tuple[set]:
+    """Return common items and both differences"""
+    c = a.intersection(b)
+    return c, a.difference(c), b.difference(c)
+
+
+def get_parent(record: geo.GeoRecord, level: str) -> geo.GeoRecord:
+    """Get parent record on specified level depth"""
+    while record and record.item.type != level:
+        record = record.item.parent
+    return record
+
+
+def match_levels(lo_records: geo.GeoRecord, hi_records: geo.GeoRecord) -> Tuple[Set[int]]:
+    """When items from different levels are compared, we need to find parents
+    from lo level to align with other level. After parent/item comparison return
+    original children records - matched and not matched
+    """
+
+    # get one set item :(
+    for hirec in hi_records:
+        break
+    level = hirec.item.type
+
+    nomatch = set()
+    parents = {}  # parent: set(records)
+    for r in lo_records:
+        parent = get_parent(r, level=level)
+        if parent is None:
+            nomatch.add(r)
+        else:
+            records = parents.setdefault(parent, set())
+            records.add(r)
+
+    hit, miss_parents, _miss_records = split_sets(set(parents), hi_records)
+
+    # children of matched parents
+    match = set().union(*(parents.get(r, set()) for r in hit))
+    # children without correct parent + children of not matched parents
+    nomatch = nomatch.union(*(parents.get(r, set()) for r in miss_parents))
+
+    # sets of lo level
+    return match, nomatch, _miss_records
+
 
 class Engine:
     def __init__(self, file=None):
@@ -63,16 +109,77 @@ class Engine:
         # index of added singleton records, handy alias
         self._index = geo.GeoRecord.registry
         self._fixup_counter = 0
-        self.lookup = self._trie.lookup
 
         if file:
             self.index(data.read_items(file))
 
-
     def lookup_same_level(self, query: str) -> Set[int]:
         exact = True
-        word_ids = self._trie.lookup(query, exact)
-        return process_id_sets(*word_ids, exact=exact)
+        word_ids = self._trie.lookup(query, exact=exact)
+        return process_sets(*word_ids, exact=exact)
+
+    @utils.profile
+    def lookup(self, query: str) -> Set[geo.GeoRecord]:
+        word_ids = self._trie.lookup(query, False)
+        # we have empty resultsets
+        if not all(word_ids):
+            return set()
+
+        if len(word_ids) < 2:
+            ids = process_sets(*word_ids)
+            return {self._index[i] for i in ids}
+
+        res = (self.process_pair(*pair) for pair in combinations(word_ids, 2))
+        res = process_sets(*res)
+
+        return res
+
+    def process_pair(self, set_a, set_b):
+        """Process pair of id sets. Iterate over first and compare with second.
+        If levels are same - intersect them, otherwise - intersect parents & level.
+        Swap sets & repeat the same.
+        """
+        order = tuple(geo.GeoMeta.registry)[::-1]  # number/area increasing
+        key = lambda r: order.index(r.item.type)  # noqa: E731
+
+        items_a = self.level_records(set_a, key)
+        items_b = self.level_records(set_b, key)
+
+        match = set()
+
+        for precise, other in (items_a, items_b), (items_b, items_a):
+
+            for level_a, records_a in precise.items():
+                nomatch_a = set(records_a)  # of current level_a
+
+                for level_b, records_b in other.items():
+
+                    if level_a == level_b:
+                        hit, miss_a, _miss_b = split_sets(nomatch_a, records_b)
+                        match |= hit
+                        nomatch_a |= miss_a
+
+                    elif level_b > level_a:
+                        hit, miss_a, _miss_b = match_levels(nomatch_a, records_b)
+                        match |= hit
+                        nomatch_a |= miss_a
+
+                    else:  # we'll get them next time in outer loop
+                        continue
+
+            # all b records finished
+            # global matched items are updated
+            # not matched items are discarded
+
+        return match
+
+    def level_records(self, id_set: Set[int], key) -> Dict[int, List[geo.GeoRecord]]:
+        """Return dictionary of {level: records} from set of ids"""
+        records = (self._index[i] for i in id_set)
+        record_ids = sorted(records, key=key)
+        res = {k: set(g) for k, g in groupby(record_ids, key=key)}
+        return res
+
     @utils.profile
     def index(self, items: Iterable[geo.GeoRecord]) -> None:
         """Add collection of geo items to the trie"""
@@ -158,34 +265,31 @@ class Engine:
         )
         print(f"\n{info}\n")
 
-    def filter(self, results: Set[int], query: str, as_dict=True, maxcount=3) -> Dict:
-        """Filter & format search results"""
+    def wrong_layout(self, query: str) -> Tuple[str, Set[geo.GeoRecord]]:
+        """Search same query in other keyboard layouts.
+        Return translated query and results"""
+        for m in KEYMAPS:
+            translated = query.translate(m)
+            recs = self.lookup(translated)
+            if recs:
+                return (translated, recs)
+        return (query, set())
+
+    def search(self, query, as_dict=True, maxcount=20) -> Dict:
+        """Perform search and return records"""
+        records = self.lookup(query)
+        if not records:
+            query, records = self.wrong_layout(query)
+
+        # Filter & format search results
         items: List[Any] = []
-        hidden = count = len(results)
-        for r in results:
-            record = self._index[r]
+        hidden = count = len(records)
+        for record in records:
             if len(items) < maxcount:
                 item = record.as_dict(query) if as_dict else record
                 items.append(item)
                 hidden -= 1
         return {"results": items, "query": query, "hidden": hidden, "count": count}
-
-    def wrong_layout(self, query: str) -> Tuple[str, Set[int]]:
-        """Search same query in other keyboard layouts.
-        Return translated query and results"""
-        for m in KEYMAPS:
-            translated = query.translate(m)
-            ids = self.lookup(translated)
-            if ids:
-                return (translated, ids)
-        return (query, set())
-
-    def search(self, query):
-        """Perform search and return results"""
-        ids = self.lookup(query)
-        if not ids:
-            query, ids = self.wrong_layout(query)
-        return self.filter(ids, query=query, as_dict=True, maxcount=20)
 
     def interactive(self):
         query = "Enter query (empty to exit):"
@@ -199,9 +303,9 @@ class Engine:
             if not query:
                 continue
 
-            ids = self.lookup(query)
-            if not ids:
-                query, ids = self.wrong_layout(query)
-                ids and print(f"Did you mean _{query}_?")
-            print(self.filter(ids, query, 3))
+            data = self.search(query, as_dict=False)
+            dquery = data.get("query", query)
+            if query != dquery:
+                print(f"Did you mean _{dquery}_?")
+            pprint(data)
         print("Bye!")
